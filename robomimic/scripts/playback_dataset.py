@@ -74,6 +74,7 @@ DEFAULT_CAMERAS = {
     EnvType.ROBOSUITE_TYPE: ["agentview"],
     EnvType.IG_MOMART_TYPE: ["rgb"],
     EnvType.GYM_TYPE: ValueError("No camera names supported for gym type env!"),
+    EnvType.MP_TYPE: [""],
 }
 
 
