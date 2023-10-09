@@ -77,7 +77,7 @@ class EnvMP(EB.EnvBase):
         """
         self._current_obs = self.env.reset()
         self._current_reward = None
-        self._current_done = None
+        self._current_done = self.is_success()
         return self.get_observation(self._current_obs)
 
     def reset_to(self, state):
@@ -108,7 +108,7 @@ class EnvMP(EB.EnvBase):
         if mode == "rgb_array":
             return self.env.get_alpha_blended_target_img(
                         self.env.goal_mask, self.env.goal_img
-                    )
+                    )[:, :, ::-1]
         else:
             raise NotImplementedError("mode={} is not implemented".format(mode))
 
@@ -120,6 +120,8 @@ class EnvMP(EB.EnvBase):
             ob (np.array): current flat observation vector to wrap and provide as a dictionary.
                 If not provided, uses self._current_obs.
         """
+        if obs is None:
+            obs = self.env.get_observation()
         ob_return = OrderedDict()
         for k in obs:
             ob_return[k] = obs[k].copy()
@@ -163,7 +165,7 @@ class EnvMP(EB.EnvBase):
         { str: bool } with at least a "task" key for the overall task success,
         and additional optional keys corresponding to other task criteria.
         """
-        return dict(task=self.env.get_success(self.env.goal_config)[0])
+        return dict(task=float(self.env.get_success(self.env.goal_config)[0]))
 
     @property
     def action_dimension(self):

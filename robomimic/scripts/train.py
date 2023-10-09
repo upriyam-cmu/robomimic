@@ -330,6 +330,10 @@ def train(config, device):
 
 def main(args):
 
+    # set torch backend
+    torch.backends.cudnn.benchmark = True
+    torch.set_float32_matmul_precision("medium")
+
     if args.config is not None:
         ext_cfg = json.load(open(args.config, 'r'))
         config = config_factory(ext_cfg["algo_name"])

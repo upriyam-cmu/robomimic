@@ -479,7 +479,7 @@ class ConvBase(Module):
         raise NotImplementedError
 
     def forward(self, inputs):
-        x = self.nets(inputs)
+        x = self.nets(inputs.to(memory_format=torch.channels_last))
         if list(self.output_shape(list(inputs.shape)[1:])) != list(x.shape)[1:]:
             raise ValueError('Size mismatch: expect size %s, but got size %s' % (
                 str(self.output_shape(list(inputs.shape)[1:])), str(list(x.shape)[1:]))
@@ -507,7 +507,7 @@ class ResNet18Conv(ConvBase):
                 (a convolution where input channels are modified to encode spatial pixel location)
         """
         super(ResNet18Conv, self).__init__()
-        net = vision_models.resnet18(pretrained=pretrained)
+        net = vision_models.resnet18(pretrained=pretrained).to(memory_format=torch.channels_last)
 
         if input_coord_conv:
             net.conv1 = CoordConv2d(input_channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
