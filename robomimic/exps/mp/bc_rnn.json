@@ -36,7 +36,7 @@
         }
     },
     "train": {
-        "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_table_simple_1600_224_smoothed.hdf5",
+        "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_trajs_2000_imsize_84.hdf5",
         "output_dir": "logs/mp/trained_models",
         "num_data_workers": 1,
         "hdf5_cache_mode": "all",
@@ -161,8 +161,8 @@
         "modalities": {
             "obs": {
                 "low_dim": [
-                    "start_config",
-                    "goal_config"
+                    "current_angles",
+                    "goal_angles"
                 ],
                 "rgb": [],
                 "depth": [],

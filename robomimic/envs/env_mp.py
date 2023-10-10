@@ -165,7 +165,7 @@ class EnvMP(EB.EnvBase):
         { str: bool } with at least a "task" key for the overall task success,
         and additional optional keys corresponding to other task criteria.
         """
-        return dict(task=float(self.env.get_success(self.env.goal_config)[0]))
+        return dict(task=float(self.env.get_success(self.env.goal_angles)[0]))
 
     @property
     def action_dimension(self):

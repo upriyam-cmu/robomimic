@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_rnn_mp_low_dim",
+        "name": "bc_rnn_mp_image",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": true,
@@ -36,7 +36,7 @@
         }
     },
     "train": {
-        "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_table_simple_1600_224_smoothed.hdf5",
+        "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_trajs_2000_imsize_84.hdf5",
         "output_dir": "logs/mp/trained_models",
         "num_data_workers": 4,
         "hdf5_cache_mode": "low_dim",
@@ -161,11 +161,11 @@
         "modalities": {
             "obs": {
                 "low_dim": [
-                    "start_config",
-                    "goal_config"
+                    "current_angles",
+                    "goal_angles"
                 ],
                 "rgb": [
-                    "perception"
+                    "default_image"
                 ],
                 "depth": [],
                 "scan": []
@@ -203,8 +203,8 @@
                 },
                 "obs_randomizer_class": "CropRandomizer",
                 "obs_randomizer_kwargs": {
-                    "crop_height": 224,
-                    "crop_width": 224,
+                    "crop_height": 76,
+                    "crop_width": 76,
                     "num_crops": 1,
                     "pos_enc": false
                 }

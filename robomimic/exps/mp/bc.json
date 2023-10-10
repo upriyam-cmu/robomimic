@@ -164,8 +164,8 @@
         "modalities": {
             "obs": {
                 "low_dim": [
-                    "start_config",
-                    "goal_config"
+                    "current_angles",
+                    "goal_angles"
                 ],
                 "rgb": [],
                 "depth": [],
