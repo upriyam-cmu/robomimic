@@ -125,6 +125,9 @@ class EnvMP(EB.EnvBase):
         ob_return = OrderedDict()
         for k in obs:
             ob_return[k] = obs[k].copy()
+            if k.endswith('image'):
+                #TODO: figure out how to do this correctly without hacking
+                ob_return[k] = ob_return[k].transpose(2, 0, 1)
         return ob_return
 
     def get_state(self):
