@@ -183,7 +183,6 @@ def initialize_obs_utils_with_obs_specs(obs_modality_specs):
         obs_modality_spec_list = [obs_modality_specs]
     else:
         obs_modality_spec_list = obs_modality_specs
-
     # iterates over observation specs
     obs_modality_mapping = {}
     for obs_modality_spec in obs_modality_spec_list:
@@ -932,6 +931,42 @@ class DepthModality(Modality):
                 inverse operation of @process_depth
         """
         return unprocess_frame(frame=obs, channel_dim=1, scale=1.)
+
+class PcdModality(Modality):
+    """
+    Modality for depth observations
+    """
+    name = "pcd"
+
+    @classmethod
+    def _default_obs_processor(cls, obs):
+        """
+        Given depth fetched from dataset, process for network input. Converts array
+        to float (from uint8), normalizes pixels from range [0, 1] to [0, 1], and channel swaps
+        from (H, W, C) to (C, H, W).
+
+        Args:
+            obs (np.array or torch.Tensor): depth array
+
+        Returns:
+            processed_obs (np.array or torch.Tensor): processed depth
+        """
+        return obs
+
+    @classmethod
+    def _default_obs_unprocessor(cls, obs):
+        """
+        Given depth prepared for network input, prepare for saving to dataset.
+        Inverse of @process_depth.
+
+        Args:
+            obs (np.array or torch.Tensor): depth array
+
+        Returns:
+            unprocessed_obs (np.array or torch.Tensor): depth passed through
+                inverse operation of @process_depth
+        """
+        return obs
 
 
 class ScanModality(Modality):

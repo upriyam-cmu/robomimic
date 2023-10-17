@@ -8,6 +8,7 @@ import abc
 import numpy as np
 import textwrap
 from collections import OrderedDict
+from robomimic.models.pcd import MPiNetsPointNet
 
 import torch
 import torch.nn as nn
@@ -895,6 +896,44 @@ class Conv1dBase(Module):
             )
         return x
 
+
+
+class PointNetEncoder(Module):
+
+    """
+    Base class for ConvNets.
+    """
+    def __init__(self):
+        super(PointNetEncoder, self).__init__()
+        net = MPiNetsPointNet()
+        self.nets = net
+
+    def forward(self, inputs):
+        x = self.nets(inputs)
+        if list(self.output_shape(list(inputs.shape)[1:])) != list(x.shape)[1:]:
+            raise ValueError('Size mismatch: expect size %s, but got size %s' % (
+                str(self.output_shape(list(inputs.shape)[1:])), str(list(x.shape)[1:]))
+            )
+        return x
+    
+    def output_shape(self, input_shape):
+        """
+        Function to compute output shape from inputs to this module. 
+
+        Args:
+            input_shape (iterable of int): shape of input. Does not include batch dimension.
+                Some modules may not need this argument, if their output does not depend 
+                on the size of the input, or if they assume fixed size input.
+
+        Returns:
+            out_shape ([int]): list of integers corresponding to output shape
+        """
+        return [2048]
+
+    def __repr__(self):
+        """Pretty print network."""
+        header = '{}'.format(str(self.__class__.__name__))
+        return header
 
 """
 ================================================

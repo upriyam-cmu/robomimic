@@ -183,6 +183,76 @@ class VisualCore(EncoderCore, BaseNets.ConvBase):
         msg = header + '(' + msg + '\n)'
         return msg
 
+class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
+    """
+    A network block that combines a visual backbone network with optional pooling
+    and linear layers.
+    """
+    def __init__(
+        self,
+        input_shape,
+        backbone_class="PointNetEncoder",
+        backbone_kwargs=None,
+    ):
+        """
+        Args:
+            input_shape (tuple): shape of input (not including batch dimension)
+            backbone_class (str): class name for the visual backbone network. Defaults
+                to "ResNet18Conv".
+            pool_class (str): class name for the visual feature pooler (optional)
+                Common options are "SpatialSoftmax" and "SpatialMeanPool". Defaults to
+                "SpatialSoftmax".
+            backbone_kwargs (dict): kwargs for the visual backbone network (optional)
+            pool_kwargs (dict): kwargs for the visual feature pooler (optional)
+            flatten (bool): whether to flatten the visual features
+            feature_dimension (int): if not None, add a Linear layer to
+                project output into a desired feature dimension
+        """
+        super(PcdCore, self).__init__(input_shape=input_shape)
+
+        if backbone_kwargs is None:
+            backbone_kwargs = dict()
+
+        # visual backbone
+        assert isinstance(backbone_class, str)
+        self.backbone = eval(backbone_class)(**backbone_kwargs)
+
+        net_list = [self.backbone]
+
+        self.nets = nn.Sequential(*net_list)
+
+    def output_shape(self, input_shape):
+        """
+        Function to compute output shape from inputs to this module. 
+
+        Args:
+            input_shape (iterable of int): shape of input. Does not include batch dimension.
+                Some modules may not need this argument, if their output does not depend 
+                on the size of the input, or if they assume fixed size input.
+
+        Returns:
+            out_shape ([int]): list of integers corresponding to output shape
+        """
+        return [2048]
+
+    def forward(self, inputs):
+        """
+        Forward pass through visual core.
+        """
+        ndim = len(self.input_shape)
+        return super(PcdCore, self).forward(inputs)
+
+    def __repr__(self):
+        """Pretty print network."""
+        header = '{}'.format(str(self.__class__.__name__))
+        msg = ''
+        indent = ' ' * 2
+        msg += textwrap.indent(
+            "\ninput_shape={}\noutput_shape={}".format(self.input_shape, self.output_shape(self.input_shape)), indent)
+        msg += textwrap.indent("\nbackbone_net={}".format(self.backbone), indent)
+        msg = header + '(' + msg + '\n)'
+        return msg
+
 
 """
 ================================================
@@ -825,4 +895,63 @@ class GaussianNoiseRandomizer(Randomizer):
         header = '{}'.format(str(self.__class__.__name__))
         msg = header + f"(input_shape={self.input_shape}, noise_mean={self.noise_mean}, noise_std={self.noise_std}, " \
                        f"limits={self.limits}, num_samples={self.num_samples})"
+        return msg
+
+class PCDRandomizer(Randomizer):
+    """
+    Randomly subsamples the PCD
+    """
+    def __init__(
+        self,
+        input_shape,
+        pcd_size=4096
+    ):
+        """
+        Args:
+            input_shape (tuple, list): shape of input (not including batch dimension)
+            pcd_size (int): number of points to subsample
+        """
+        super(PCDRandomizer, self).__init__()
+
+        self.input_shape = input_shape
+        self.pcd_size = pcd_size
+
+    def output_shape_in(self, input_shape=None):
+        shape = list(input_shape)
+        shape[1] = self.pcd_size
+        return shape
+
+    def output_shape_out(self, input_shape=None):
+        return list(input_shape)
+
+    def _forward_in(self, inputs):
+        """
+        subsamples the pcd to size pcd_size (dim = 1)
+        """
+        # torch version of points = points[np.random.choice(points.shape[0], 4096, replace=False), :]
+        # output shape should be (B x self.pcd_size x 4)
+        # Randomly select pcd_size indices without replacement
+        pcd_size = self.pcd_size
+        batch_size = inputs.shape[0]
+        num_points = inputs.shape[1]
+
+        # Generate random indices for each point in each batch
+        random_indices = torch.randint(0, num_points, (batch_size, pcd_size), device=inputs.device)
+
+        # Create a meshgrid of batch indices to index along the batch dimension
+        batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, pcd_size)
+
+        # Use advanced indexing to select the corresponding points
+        out = inputs[batch_indices, random_indices, :]
+        return out
+
+    def _forward_out(self, inputs):
+        """
+        """
+        return inputs 
+    
+    def __repr__(self):
+        """Pretty print network."""
+        header = '{}'.format(str(self.__class__.__name__))
+        msg = header + f"(input_shape={self.input_shape}, pcd_size={self.pcd_size})"
         return msg
