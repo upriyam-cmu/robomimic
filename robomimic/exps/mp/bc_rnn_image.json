@@ -4,7 +4,7 @@
         "name": "bc_rnn_mp_image",
         "validate": true,
         "logging": {
-            "terminal_output_to_txt": true,
+            "terminal_output_to_txt": false,
             "log_tb": true,
             "log_wandb": true,
             "wandb_proj_name": "neural_mp"
@@ -29,7 +29,7 @@
         "rollout": {
             "enabled": true,
             "n": 50,
-            "horizon": 50,
+            "horizon": 100,
             "rate": 50,
             "warmstart": 0,
             "terminate_on_success": true
