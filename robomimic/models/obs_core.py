@@ -899,59 +899,85 @@ class GaussianNoiseRandomizer(Randomizer):
 
 class PCDRandomizer(Randomizer):
     """
-    Randomly subsamples the PCD
+    Randomly subsamples the point cloud.
     """
-    def __init__(
-        self,
-        input_shape,
-        pcd_size=4096
-    ):
+
+    def __init__(self, input_shape, pcd_size=4096):
         """
+        Initializes the PCDRandomizer.
+
         Args:
-            input_shape (tuple, list): shape of input (not including batch dimension)
-            pcd_size (int): number of points to subsample
+            input_shape (tuple, list): The shape of the input (not including batch dimension).
+            pcd_size (int, optional): The number of points to subsample from the point cloud. Default is 4096.
         """
         super(PCDRandomizer, self).__init__()
-
         self.input_shape = input_shape
         self.pcd_size = pcd_size
 
     def output_shape_in(self, input_shape=None):
-        shape = list(input_shape)
-        shape[1] = self.pcd_size
-        return shape
+        """
+        Computes the output shape for the subsampled point cloud.
+
+        Args:
+            input_shape (tuple, list, optional): The shape of the input. If None, uses the stored input shape.
+
+        Returns:
+            list: A list representing the shape of the subsampled point cloud.
+        """
+        input_shape = input_shape or self.input_shape
+        return [input_shape[0], self.pcd_size, *input_shape[2:]]
 
     def output_shape_out(self, input_shape=None):
+        """
+        Returns the output shape for network outputs. Since this randomizer does not modify the outputs,
+        it returns the input shape unchanged.
+
+        Args:
+            input_shape (tuple, list, optional): The shape of the input. 
+
+        Returns:
+            list: The shape of the output.
+        """
         return list(input_shape)
 
     def _forward_in(self, inputs):
         """
-        subsamples the pcd to size pcd_size (dim = 1)
+        Subsamples the point cloud to a desired size along the point dimension.
+
+        Args:
+            inputs (torch.Tensor): A tensor representing the input point cloud of shape (batch_size, num_points, ...).
+
+        Returns:
+            torch.Tensor: A tensor representing the subsampled point cloud.
         """
-        # torch version of points = points[np.random.choice(points.shape[0], 4096, replace=False), :]
-        # output shape should be (B x self.pcd_size x 4)
-        # Randomly select pcd_size indices without replacement
-        pcd_size = self.pcd_size
         batch_size = inputs.shape[0]
         num_points = inputs.shape[1]
+        
+        effective_pcd_size = min(self.pcd_size, num_points)
+        random_indices = torch.randint(0, num_points, (batch_size, effective_pcd_size), device=inputs.device)
+        batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, effective_pcd_size)
 
-        # Generate random indices for each point in each batch
-        random_indices = torch.randint(0, num_points, (batch_size, pcd_size), device=inputs.device)
-
-        # Create a meshgrid of batch indices to index along the batch dimension
-        batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, pcd_size)
-
-        # Use advanced indexing to select the corresponding points
-        out = inputs[batch_indices, random_indices, :]
-        return out
+        return inputs[batch_indices, random_indices, :]
 
     def _forward_out(self, inputs):
         """
+        Returns the inputs unchanged. This method exists to fulfill the interface requirements of the base class
+        but doesn't apply any transformation to the inputs.
+
+        Args:
+            inputs (torch.Tensor): A tensor representing network outputs.
+
+        Returns:
+            torch.Tensor: The input tensor unchanged.
         """
         return inputs 
-    
+
     def __repr__(self):
-        """Pretty print network."""
-        header = '{}'.format(str(self.__class__.__name__))
-        msg = header + f"(input_shape={self.input_shape}, pcd_size={self.pcd_size})"
-        return msg
+        """
+        Returns a string representation of the PCDRandomizer.
+
+        Returns:
+            str: A string representation of the PCDRandomizer.
+        """
+        return f"{self.__class__.__name__}(input_shape={self.input_shape}, pcd_size={self.pcd_size})"
+
