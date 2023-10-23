@@ -928,7 +928,8 @@ class PointNetEncoder(Module):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        return [2048]
+        # return [2048]
+        return [1024]
 
     def __repr__(self):
         """Pretty print network."""

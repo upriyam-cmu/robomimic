@@ -127,8 +127,6 @@ class Algo(object):
         self._create_networks()
         self._create_optimizers()
         assert isinstance(self.nets, nn.ModuleDict)
-        for k in self.nets:
-            self.nets[k] = torch.compile(self.nets[k], mode='max-autotune')
 
     def _create_shapes(self, obs_keys, obs_key_shapes):
         """

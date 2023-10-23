@@ -233,7 +233,8 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        return [2048]
+        # return [2048]
+        return [1024]
 
     def forward(self, inputs):
         """

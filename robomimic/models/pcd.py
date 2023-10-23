@@ -17,32 +17,44 @@ class MPiNetsPointNet(pl.LightningModule):
         self.SA_modules = nn.ModuleList()
         self.SA_modules.append(
             PointnetSAModule(
-                npoint=512,
+                # npoint=512,
+                npoint=128,
                 radius=0.05,
-                nsample=128,
+                # nsample=128,
+                nsample=64,
                 mlp=[1, 64, 64, 64],
                 bn=False,
             )
         )
         self.SA_modules.append(
             PointnetSAModule(
-                npoint=128,
+                # npoint=128,
+                npoint=64,
                 radius=0.3,
-                nsample=128,
+                # nsample=128,
+                nsample=64,
                 mlp=[64, 128, 128, 256],
                 bn=False,
             )
         )
-        self.SA_modules.append(PointnetSAModule(mlp=[256, 512, 512, 1024], bn=False))
+        # self.SA_modules.append(PointnetSAModule(mlp=[256, 512, 512, 1024], bn=False))
+        self.SA_modules.append(PointnetSAModule(mlp=[256, 512, 512], bn=False))
 
         self.fc_layer = nn.Sequential(
-            nn.Linear(1024, 4096),
-            nn.GroupNorm(16, 4096),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(4096, 2048),
+            # nn.Linear(1024, 4096),
+            # nn.GroupNorm(16, 4096),
+            # nn.LeakyReLU(inplace=True),
+            # nn.Linear(4096, 2048),
+            # nn.GroupNorm(16, 2048),
+            # nn.LeakyReLU(inplace=True),
+            # nn.Linear(2048, 2048),
+            nn.Linear(512, 2048),
             nn.GroupNorm(16, 2048),
             nn.LeakyReLU(inplace=True),
-            nn.Linear(2048, 2048),
+            nn.Linear(2048, 1024),
+            nn.GroupNorm(16, 1024),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(1024, 1024),
         )
 
     @staticmethod
