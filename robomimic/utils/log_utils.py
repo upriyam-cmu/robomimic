@@ -109,7 +109,7 @@ class DataLogger(object):
             log_stats (bool): whether to store the mean/max/min/std for all data logged so far with key k
         """
 
-        assert data_type in ['scalar', 'image']
+        assert data_type in ['scalar', 'image', 'video']
 
         if data_type == 'scalar':
             # maybe update internal cache if logging stats for this key
@@ -140,6 +140,8 @@ class DataLogger(object):
                             self._wandb_logger.log({"{}/{}".format(k, stat_k): stat_v}, step=epoch)
                 elif data_type == 'image':
                     raise NotImplementedError
+                elif data_type == 'video':
+                    self._wandb_logger.log({k: self._wandb_logger.Video(v, format='mp4')}, step=epoch)
             except Exception as e:
                 log_warning("wandb logging: {}".format(e))
 

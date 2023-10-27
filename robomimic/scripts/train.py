@@ -272,6 +272,8 @@ def train(config, device):
                 terminate_on_success=config.experiment.rollout.terminate_on_success,
             )
 
+            for k in video_paths.keys():
+                data_logger.record("Video/{}".format(k), video_paths[k], epoch, data_type="video")
             # summarize results from rollouts to tensorboard and terminal
             for env_name in all_rollout_logs:
                 rollout_logs = all_rollout_logs[env_name]
