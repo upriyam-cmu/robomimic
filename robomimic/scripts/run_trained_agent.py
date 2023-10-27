@@ -116,7 +116,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
             act = policy(ob=obs)
 
             # play action
-            next_obs, r, done, _ = env.step(act)
+            next_obs, r, done, info = env.step(act)
 
             # compute reward
             total_reward += r
@@ -158,7 +158,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
         print("WARNING: got rollout exception {}".format(e))
 
     stats = dict(Return=total_reward, Horizon=(step_i + 1), Success_Rate=float(success))
-
+    stats.update(info)
     if return_obs:
         # convert list of dict to dict of list for obs dictionaries (for convenient writes to hdf5 dataset)
         traj["obs"] = TensorUtils.list_of_flat_dict_to_dict_of_list(traj["obs"])

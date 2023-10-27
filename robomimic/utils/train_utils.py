@@ -226,7 +226,7 @@ def run_rollout(
             ac = policy(ob=ob_dict, goal=goal_dict)
 
             # play action
-            ob_dict, r, done, _ = env.step(ac)
+            ob_dict, r, done, info = env.step(ac)
 
             # render to screen
             if render:
@@ -257,6 +257,7 @@ def run_rollout(
     results["Return"] = total_reward
     results["Horizon"] = step_i + 1
     results["Success_Rate"] = float(success["task"])
+    results.update(info)
 
     # log additional success metrics
     for k in success:
