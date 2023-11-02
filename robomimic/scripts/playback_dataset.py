@@ -74,7 +74,7 @@ DEFAULT_CAMERAS = {
     EnvType.ROBOSUITE_TYPE: ["agentview"],
     EnvType.IG_MOMART_TYPE: ["rgb"],
     EnvType.GYM_TYPE: ValueError("No camera names supported for gym type env!"),
-    EnvType.MP_TYPE: [""],
+    EnvType.MP_TYPE: ["front_image"],
 }
 
 
@@ -119,18 +119,22 @@ def playback_trajectory_with_env(
     traj_len = states.shape[0]
     action_playback = (actions is not None)
     if action_playback:
-        assert states.shape[0] == actions.shape[0]
+        traj_len -= 1
+    #     assert states.shape[0] == actions.shape[0], (states.shape, actions.shape)
 
     for i in range(traj_len):
         if action_playback:
-            env.step(actions[i])
+            obs, reward, done, info = env.step(actions[i])
             if i < traj_len - 1:
                 # check whether the actions deterministically lead to the same recorded states
                 state_playback = env.get_state()["states"]
                 if not np.all(np.equal(states[i + 1], state_playback)):
                     err = np.linalg.norm(states[i + 1] - state_playback)
                     print("warning: playback diverged by {} at step {}".format(err, i))
+            if done:
+                break
         else:
+            env.env.get_info()
             env.reset_to({"states" : states[i]})
 
         # on-screen render
@@ -149,6 +153,10 @@ def playback_trajectory_with_env(
 
         if first:
             break
+    # print("Success: ", json.dumps(env.is_success(), indent=4))
+    # print(json.dumps(env.env.get_info(), indent=4))
+    combined_dict = {**env.is_success(), **env.env.get_info()}
+    return combined_dict
 
 
 def playback_trajectory_with_obs(
@@ -244,6 +252,7 @@ def playback_dataset(args):
     if write_video:
         video_writer = imageio.get_writer(args.video_path, fps=20)
 
+    stats = []
     for ind in range(len(demos)):
         ep = demos[ind]
         print("Playing back episode: {}".format(ep))
@@ -268,8 +277,7 @@ def playback_dataset(args):
         actions = None
         if args.use_actions:
             actions = f["data/{}/actions".format(ep)][()]
-
-        playback_trajectory_with_env(
+        stats_ep = playback_trajectory_with_env(
             env=env, 
             initial_state=initial_state, 
             states=states, actions=actions, 
@@ -279,6 +287,12 @@ def playback_dataset(args):
             camera_names=args.render_image_names,
             first=args.first,
         )
+        stats.append(stats_ep)
+    # print stats mean across keys
+    stats_keys = stats[0].keys()
+    stats_mean = {k: np.mean([s[k] for s in stats]) for k in stats_keys}
+    print("Stats mean: ", json.dumps(stats_mean, indent=4))
+
 
     f.close()
     if write_video:
