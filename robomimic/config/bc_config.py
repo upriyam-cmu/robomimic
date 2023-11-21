@@ -104,3 +104,7 @@ class BCConfig(BaseConfig):
         self.algo.transformer.activation = "gelu"                   # activation function for MLP in Transformer Block
         self.algo.transformer.supervise_all_steps = False           # if true, supervise all intermediate actions, otherwise only final one
         self.algo.transformer.nn_parameter_for_timesteps = True     # if true, use nn.Parameter otherwise use nn.Embedding
+
+        # mp settings
+        self.experiment.rollout.evaluate_on_dataset = False
+        self.experiment.rollout.evaluate_on_dataset_filter_key = 'valid'

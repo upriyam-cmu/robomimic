@@ -229,7 +229,17 @@ def train(config, device):
         # Evaluate the model on validation set
         if config.experiment.validate:
             with torch.no_grad():
+                try:
+                    low_noise_eval = model.nets["policy"].low_noise_eval
+                    model.nets["policy"].low_noise_eval = False
+                except:
+                    low_noise_eval = None
+                    pass
                 step_log = TrainUtils.run_epoch(model=model, data_loader=valid_loader, epoch=epoch, validate=True, num_steps=valid_num_steps)
+                try:
+                    model.nets["policy"].low_noise_eval = low_noise_eval
+                except:
+                    pass
             for k, v in step_log.items():
                 if k.startswith("Time_"):
                     data_logger.record("Timing_Stats/Valid_{}".format(k[5:]), v, epoch)

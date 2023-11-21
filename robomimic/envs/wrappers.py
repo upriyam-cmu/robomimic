@@ -7,7 +7,7 @@ import numpy as np
 from collections import deque
 
 import robomimic.envs.env_base as EB
-
+import h5py
 
 class EnvWrapper(object):
     """
@@ -218,3 +218,46 @@ class FrameStackWrapper(EnvWrapper):
     def _to_string(self):
         """Info to pretty print."""
         return "num_frames={}".format(self.num_frames)
+
+class EvaluateOnDatasetWrapper(EnvWrapper):
+    def __init__(self, env, dataset_path, filter_key="valid"):
+        """
+        Args:
+            env (EnvBase instance): The environment to wrap.
+            dataset_path (str): path to dataset
+            filter_key (str): key to filter dataset on
+        """
+        super(EvaluateOnDatasetWrapper, self).__init__(env=env)
+        self._dataset_path = dataset_path
+        self._filter_key = filter_key
+        self.load_evaluation_data(dataset_path)
+    
+    def load_evaluation_data(self, hdf5_path):
+        self.hdf5_file = h5py.File(hdf5_path, "r", swmr=True, libver="latest")
+        filter_key = self._filter_key
+        self.demos = [
+            elem.decode("utf-8")
+            for elem in np.array(self.hdf5_file["mask/{}".format(filter_key)][:])
+        ]
+        self.initial_states = [
+            dict(
+                states=self.hdf5_file["data/{}/states".format(ep)][()][0],
+            )
+            for ep in self.demos
+        ]
+        self.eval_index = 0
+    
+    def reset(self):
+        """
+        Reset environment.
+
+        Returns:
+            observation (dict): initial observation dictionary.
+        """
+        if self._dataset_path is not None:
+            print("Resetting to state {}".format(self.eval_index))
+            state = self.initial_states[self.eval_index % len(self.initial_states)]
+            self.eval_index += 1
+            return self.reset_to(state)
+        else:
+            return self.env.reset()
