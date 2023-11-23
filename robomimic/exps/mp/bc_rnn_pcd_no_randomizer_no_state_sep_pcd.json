@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_rnn_mp_low_dim",
+        "name": "bc_rnn_mp_pcd_no_randomizer",
         "validate": false,
         "logging": {
             "terminal_output_to_txt": false,
@@ -36,16 +36,16 @@
         }
     },
     "train": {
-        "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_trajs_2000_imsize_84.hdf5",
+        "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_table_simple_1600_224_smoothed.hdf5",
         "output_dir": "logs/mp/trained_models",
-        "num_data_workers": 1,
-        "hdf5_cache_mode": "all",
+        "num_data_workers": 4,
+        "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_load_next_obs": false,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": null,
-        "seq_length": 10,
+        "seq_length": 8,
         "pad_seq_length": true,
         "frame_stack": 1,
         "pad_frame_stack": true,
@@ -56,7 +56,7 @@
         ],
         "goal_mode": null,
         "cuda": true,
-        "batch_size": 100,
+        "batch_size": 16,
         "num_epochs": 10000,
         "seed": 1
     },
@@ -134,7 +134,7 @@
         "rnn": {
             "enabled": true,
             "horizon": 10,
-            "hidden_dim": 400,
+            "hidden_dim": 1000,
             "rnn_type": "LSTM",
             "num_layers": 2,
             "open_loop": false,
@@ -161,18 +161,18 @@
         "modalities": {
             "obs": {
                 "low_dim": [
-                    "current_angles",
-                    "goal_angles"
                 ],
                 "rgb": [],
                 "depth": [],
-                "scan": []
+                "scan": [],
+                "pcd": ["robot_pcd", "scene_pcd", "target_robot_pcd"]
             },
             "goal": {
                 "low_dim": [],
                 "rgb": [],
                 "depth": [],
-                "scan": []
+                "scan": [],
+                "pcd":[]
             }
         },
         "encoder": {
@@ -184,7 +184,35 @@
             },
             "rgb": {
                 "core_class": "VisualCore",
-                "core_kwargs": {},
+                "core_kwargs": {
+                    "feature_dimension": 64,
+                    "backbone_class": "ResNet18Conv",
+                    "backbone_kwargs": {
+                        "pretrained": false,
+                        "input_coord_conv": false
+                    },
+                    "pool_class": "SpatialSoftmax",
+                    "pool_kwargs": {
+                        "num_kp": 32,
+                        "learnable_temperature": false,
+                        "temperature": 1.0,
+                        "noise_std": 0.0
+                    }
+                },
+                "obs_randomizer_class": "CropRandomizer",
+                "obs_randomizer_kwargs": {
+                    "crop_height": 224,
+                    "crop_width": 224,
+                    "num_crops": 1,
+                    "pos_enc": false
+                }
+            },
+            "pcd": {
+                "core_class": "PcdCore",
+                "core_kwargs": {
+                    "backbone_class": "PointNetEncoder",
+                    "backbone_kwargs": {}
+                },
                 "obs_randomizer_class": null,
                 "obs_randomizer_kwargs": {}
             },

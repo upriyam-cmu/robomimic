@@ -30,7 +30,7 @@
             "enabled": true,
             "n": 50,
             "horizon": 100,
-            "rate": 50,
+            "rate": 100,
             "warmstart": 0,
             "terminate_on_success": true
         }
@@ -161,8 +161,8 @@
         "modalities": {
             "obs": {
                 "low_dim": [
-                    "current_angles",
-                    "goal_angles"
+                    "robot_pcd",
+                    "target_robot_pcd"
                 ],
                 "rgb": [],
                 "depth": [],
