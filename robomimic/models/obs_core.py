@@ -233,8 +233,10 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        # return [2048]
-        return [1024]
+        if self.backbone.nets.size == 'small':
+            return [1024]
+        elif self.backbone.nets.size == 'large':
+            return [2048]
 
     def forward(self, inputs):
         """

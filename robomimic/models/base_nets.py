@@ -903,9 +903,9 @@ class PointNetEncoder(Module):
     """
     Base class for ConvNets.
     """
-    def __init__(self):
+    def __init__(self, encoder_size='small'):
         super(PointNetEncoder, self).__init__()
-        net = MPiNetsPointNet()
+        net = MPiNetsPointNet(size=encoder_size)
         self.nets = net
 
     def forward(self, inputs):
@@ -928,8 +928,10 @@ class PointNetEncoder(Module):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        # return [2048]
-        return [1024]
+        if self.nets.size == 'small':
+            return [1024]
+        elif self.nets.size == 'large':
+            return [2048]
 
     def __repr__(self):
         """Pretty print network."""

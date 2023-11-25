@@ -64,7 +64,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 import robomimic
-from robomimic.envs.env_mp import render_pointcloud
+from robomimic.envs.env_mp import render_pointcloud, render_single_pointcloud
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.file_utils as FileUtils
@@ -186,8 +186,15 @@ def playback_trajectory_with_obs(
     traj_len = traj_grp["actions"].shape[0]
     for i in range(traj_len):
         if video_count % video_skip == 0:
-            if 'pcd' in traj_grp['obs']:
-                frame = render_pointcloud(traj_grp['obs/pcd'][()][i])
+            obs_keys = traj_grp["obs"].keys()
+            pcd_keys = [k for k in obs_keys if "pcd" in k]
+            if len(pcd_keys) > 0:
+                frames = []
+                for pcd_key in pcd_keys:
+                    # frame = render_pointcloud(traj_grp['obs/pcd'][()][i])
+                    frame = render_single_pointcloud(traj_grp[f'obs/{pcd_key}'][()][i])
+                    frames.append(frame)
+                frame = np.concatenate(frames, axis=1)
             else:
                 # concatenate image obs together
                 im = [traj_grp["obs/{}".format(k)][i] for k in image_names]
@@ -294,9 +301,9 @@ def playback_dataset(args):
         )
         stats.append(stats_ep)
     # print stats mean across keys
-    # stats_keys = stats[0].keys()
-    # stats_mean = {k: np.mean([s[k] for s in stats]) for k in stats_keys}
-    # print("Stats mean: ", json.dumps(stats_mean, indent=4))
+    stats_keys = stats[0].keys()
+    stats_mean = {k: np.mean([s[k] for s in stats]) for k in stats_keys}
+    print("Stats mean: ", json.dumps(stats_mean, indent=4))
 
 
     f.close()

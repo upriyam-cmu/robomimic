@@ -91,7 +91,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
         stats (dict): some statistics for the rollout - such as return, horizon, and task success
         traj (dict): dictionary that corresponds to the rollout trajectory
     """
-    assert isinstance(env, EnvBase)
+    # assert isinstance(env, EnvBase)
     assert isinstance(policy, RolloutPolicy)
     assert not (render and (video_writer is not None))
 

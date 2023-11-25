@@ -317,6 +317,42 @@ def render_pointcloud(pcd):
     img = images[0, ..., :3].cpu().numpy()
     return img
 
+def render_single_pointcloud(pcd):
+    device = torch.device("cuda:0")
+    torch.cuda.set_device(device)
+    verts = torch.Tensor(pcd[:, :3]).to(device)
+
+    rgb_pcd = torch.ones_like(verts) * torch.tensor([255, 0, 0]).to(device)
+    rgb = torch.Tensor(rgb_pcd).to(device)
+
+    point_cloud = Pointclouds(points=[verts], features=[rgb])
+
+    # Initialize a camera.
+    R, T = look_at_view_transform(1, 0, 90, up=((1, 0, 0),))
+    cameras = FoVOrthographicCameras(device=device, R=R, T=T, znear=0.01)
+
+    # Define the settings for rasterization and shading. Here we set the output image to be of size
+    # 512x512. As we are rendering images for visualization purposes only we will set faces_per_pixel=1
+    # and blur_radius=0.0. Refer to raster_points.py for explanations of these parameters. 
+    raster_settings = PointsRasterizationSettings(
+        image_size=512, 
+        # radius = 0.003,
+        points_per_pixel = 10
+    )
+
+
+    # Create a points renderer by compositing points using an alpha compositor (nearer points
+    # are weighted more heavily). See [1] for an explanation.
+    rasterizer = PointsRasterizer(cameras=cameras, raster_settings=raster_settings)
+    renderer = PointsRenderer(
+        rasterizer=rasterizer,
+        compositor=AlphaCompositor()
+    )
+
+    images = renderer(point_cloud)
+    img = images[0, ..., :3].cpu().numpy()
+    return img
+
 if __name__ == "__main__":
     from hydra import compose, initialize
     from omegaconf import OmegaConf
