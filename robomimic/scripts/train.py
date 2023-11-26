@@ -42,7 +42,7 @@ from robomimic.algo import algo_factory, RolloutPolicy
 from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
 
 
-def train(config, device):
+def train(config, device, ckpt_path=None):
     """
     Train a model using the algorithm.
     """
@@ -116,13 +116,17 @@ def train(config, device):
         log_tb=config.experiment.logging.log_tb,
         log_wandb=config.experiment.logging.log_wandb,
     )
-    model = algo_factory(
-        algo_name=config.algo_name,
-        config=config,
-        obs_key_shapes=shape_meta["all_shapes"],
-        ac_dim=shape_meta["ac_dim"],
-        device=device,
-    )
+    # restore policy
+    if ckpt_path is not None:
+        model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True)
+    else:
+        model = algo_factory(
+            algo_name=config.algo_name,
+            config=config,
+            obs_key_shapes=shape_meta["all_shapes"],
+            ac_dim=shape_meta["ac_dim"],
+            device=device,
+        )
     
     # save the config as a json file
     with open(os.path.join(log_dir, '..', 'config.json'), 'w') as outfile:
@@ -345,8 +349,15 @@ def main(args):
     # set torch backend
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision("medium")
+    
+    # relative path to agent
+    ckpt_path = args.agent
 
-    if args.config is not None:
+    if ckpt_path is not None:
+        ckpt_dict = FileUtils.load_dict_from_checkpoint(ckpt_path=ckpt_path)
+        config, _ = FileUtils.config_from_checkpoint(ckpt_dict=ckpt_dict)
+        config.unlock()
+    elif args.config is not None:
         ext_cfg = json.load(open(args.config, 'r'))
         config = config_factory(ext_cfg["algo_name"])
         # update config with external json - this will throw errors if
@@ -389,8 +400,9 @@ def main(args):
 
     # catch error during training and print it
     res_str = "finished run successfully!"
+
     try:
-        train(config, device=device)
+        train(config, device=device, ckpt_path=ckpt_path)
     except Exception as e:
         res_str = "run failed with error:\n{}\n\n{}".format(e, traceback.format_exc())
     print(res_str)
@@ -398,6 +410,14 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    # Path to trained model
+    parser.add_argument(
+        "--agent",
+        type=str,
+        default=None,
+        help="path to saved checkpoint pth file",
+    )
 
     # External config file that overwrites default config
     parser.add_argument(
