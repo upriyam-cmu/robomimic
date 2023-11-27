@@ -630,6 +630,7 @@ class BC_RNN_GMM(BC_RNN):
 
         predictions = OrderedDict(
             log_probs=log_probs,
+            actions=dists.sample(),
         )
         return predictions
 
@@ -646,13 +647,18 @@ class BC_RNN_GMM(BC_RNN):
         Returns:
             losses (dict): dictionary of losses computed over the batch
         """
-
+        losses = OrderedDict()
+        a_target = batch["actions"]
+        actions = predictions["actions"]
         # loss is just negative log-likelihood of action targets
         action_loss = -predictions["log_probs"].mean()
-        return OrderedDict(
-            log_probs=-action_loss,
-            action_loss=action_loss,
-        )
+        losses["l2_loss"] = nn.MSELoss()(actions, a_target)
+        losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
+        # cosine direction loss on eef delta position
+        losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
+        losses['log_probs'] = -action_loss
+        losses['action_loss'] = action_loss
+        return losses
 
     def log_info(self, info):
         """
@@ -668,6 +674,14 @@ class BC_RNN_GMM(BC_RNN):
         log = PolicyAlgo.log_info(self, info)
         log["Loss"] = info["losses"]["action_loss"].item()
         log["Log_Likelihood"] = info["losses"]["log_probs"].item() 
+        if "policy_grad_norms" in info:
+            log["Policy_Grad_Norms"] = info["policy_grad_norms"]
+        if "l2_loss" in info["losses"]:
+            log["L2_Loss"] = info["losses"]["l2_loss"].item()
+        if "l1_loss" in info["losses"]:
+            log["L1_Loss"] = info["losses"]["l1_loss"].item()
+        if "cos_loss" in info["losses"]:
+            log["Cosine_Loss"] = info["losses"]["cos_loss"].item()
         if "policy_grad_norms" in info:
             log["Policy_Grad_Norms"] = info["policy_grad_norms"]
         return log
