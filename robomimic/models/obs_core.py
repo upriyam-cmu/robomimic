@@ -233,7 +233,9 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        if self.backbone.nets.size == 'small':
+        if self.backbone.nets.size == 'super_small':
+            return [7]
+        elif self.backbone.nets.size == 'small':
             return [1024]
         elif self.backbone.nets.size == 'large':
             return [2048]

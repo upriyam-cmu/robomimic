@@ -16,7 +16,37 @@ class MPiNetsPointNet(pl.LightningModule):
         Assembles the model design into a ModuleList
         """
         self.SA_modules = nn.ModuleList()
-        if self.size == 'small':
+        if self.size == 'super_small':
+            self.SA_modules.append(
+                PointnetSAModule(
+                    npoint=128,
+                    radius=0.05,
+                    nsample=64,
+                    mlp=[1, 64, 64, 64],
+                    bn=False,
+                )
+            )
+            self.SA_modules.append(
+                PointnetSAModule(
+                    npoint=64,
+                    radius=0.3,
+                    nsample=64,
+                    mlp=[64, 64, 64],
+                    bn=False,
+                )
+            )
+            self.SA_modules.append(PointnetSAModule(mlp=[64, 64, 64], bn=False))
+
+            self.fc_layer = nn.Sequential(
+                nn.Linear(64, 64),
+                nn.GroupNorm(16, 64),
+                nn.LeakyReLU(inplace=True),
+                nn.Linear(64, 64),
+                nn.GroupNorm(16, 64),
+                nn.LeakyReLU(inplace=True),
+                nn.Linear(64, 7),
+            )
+        elif self.size == 'small':
             self.SA_modules.append(
                 PointnetSAModule(
                     npoint=128,
@@ -104,8 +134,6 @@ class MPiNetsPointNet(pl.LightningModule):
         """
         assert point_cloud.size(2) == 4
         xyz, features = self._break_up_pc(point_cloud)
-
         for module in self.SA_modules:
             xyz, features = module(xyz, features)
-
         return self.fc_layer(features.squeeze(-1))

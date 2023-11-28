@@ -928,7 +928,9 @@ class PointNetEncoder(Module):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        if self.nets.size == 'small':
+        if self.nets.size == 'super_small':
+            return [7]
+        elif self.nets.size == 'small':
             return [1024]
         elif self.nets.size == 'large':
             return [2048]
