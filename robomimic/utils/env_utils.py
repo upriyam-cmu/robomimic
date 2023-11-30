@@ -290,7 +290,10 @@ def wrap_env_from_config(env, config):
     if ("frame_stack" in config.train) and (config.train.frame_stack > 1):
         from robomimic.envs.wrappers import FrameStackWrapper
         env = FrameStackWrapper(env, num_frames=config.train.frame_stack)
-    if ("evaluate_on_dataset" in config.experiment.rollout) and config.experiment.rollout.evaluate_on_dataset:
+    if config.experiment.rollout.evaluate_on_dataset:
         from robomimic.envs.wrappers import EvaluateOnDatasetWrapper
         env = EvaluateOnDatasetWrapper(env, dataset_path=config.train.data, filter_key=config.experiment.rollout.evaluate_on_dataset_filter_key)
+    if config.observation.modalities.obs.pcd == 'goal_angles':
+        from robomimic.envs.wrappers import ResampleGoalPCDWrapper
+        env = ResampleGoalPCDWrapper(env)
     return env

@@ -5,11 +5,14 @@ import numpy as np
 from typing import Tuple
 from pointnet2_ops.pointnet2_modules import PointnetSAModule
 
+from robofin.pointcloud.torch import FrankaSampler
+
 class MPiNetsPointNet(pl.LightningModule):
     def __init__(self, size='small'):
         super().__init__()
         self.size = size
         self._build_model()
+        self.fk_sampler = FrankaSampler("cuda", use_cache=True, num_fixed_points=4096)
 
     def _build_model(self):
         """
@@ -132,6 +135,15 @@ class MPiNetsPointNet(pl.LightningModule):
                                               This tensor must be on the GPU (CPU tensors not supported)
         :rtype torch.Tensor: The output from the network
         """
+        if len(point_cloud.shape) == 2:
+            point_cloud = self.fk_sampler.sample(point_cloud)
+            point_cloud = torch.cat([point_cloud, torch.zeros(point_cloud.shape[0], point_cloud.shape[1], 1).to(point_cloud.device)], dim=-1)
+            num_points = point_cloud.shape[1]
+            
+            effective_pcd_size = min(2048, num_points)
+            random_indices = torch.randint(0, num_points, (point_cloud.shape[0], effective_pcd_size), device=point_cloud.device)
+            batch_indices = torch.arange(point_cloud.shape[0], device=point_cloud.device).unsqueeze(1).expand(-1, effective_pcd_size)
+            point_cloud = point_cloud[batch_indices, random_indices, :]
         assert point_cloud.size(2) == 4
         xyz, features = self._break_up_pc(point_cloud)
         for module in self.SA_modules:

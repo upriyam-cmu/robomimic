@@ -8,6 +8,9 @@ from collections import deque
 
 import robomimic.envs.env_base as EB
 import h5py
+import torch
+
+from robofin.pointcloud.torch import FrankaSampler
 
 class EnvWrapper(object):
     """
@@ -245,6 +248,29 @@ class EvaluateOnDatasetWrapper(EnvWrapper):
             )
             for ep in self.demos
         ]
+        try:
+            self.goal_pcds = [
+                self.hdf5_file["data/{}/obs/target_robot_pcd".format(ep)][()][0]
+                for ep in self.demos
+            ]
+        except:
+            self.goal_pcds = None
+        
+        try:
+            self.actions = [
+                self.hdf5_file["data/{}/actions".format(ep)][()]
+                for ep in self.demos
+            ]
+        except:
+            self.actions = None
+        
+        try:
+            self.current_angles = [
+                self.hdf5_file["data/{}/obs/current_angles".format(ep)][()]
+                for ep in self.demos
+            ]
+        except:
+            self.current_angles = None
         self.eval_index = 0
     
     def reset(self):
@@ -254,10 +280,83 @@ class EvaluateOnDatasetWrapper(EnvWrapper):
         Returns:
             observation (dict): initial observation dictionary.
         """
+        self.timestep = 0
         if self._dataset_path is not None:
             print("Resetting to state {}".format(self.eval_index))
             state = self.initial_states[self.eval_index % len(self.initial_states)]
+            self.env.reset()
+            obs = self.env.reset_to(state)
+            if self.goal_pcds is not None:
+                goal_pcd = self.goal_pcds[self.eval_index % len(self.initial_states)]
+                self.env.env.goal_pcd = goal_pcd[:, :3]
+                obs['target_robot_pcd'] = goal_pcd
             self.eval_index += 1
-            return self.reset_to(state)
+            return obs
         else:
             return self.env.reset()
+    
+    def step(self, action):
+        """
+        Step environment.
+
+        Args:
+            action (np.array): action to take
+
+        Returns:
+            observation (dict): observation dictionary.
+            reward (float): reward for this step
+            done (bool): whether the task is done
+            info (dict): extra information
+        """
+        if self.actions is not None:
+            correct_action = self.actions[(self.eval_index-1) % len(self.initial_states)][self.timestep]
+            # mse 
+            mse = np.linalg.norm(action - correct_action) ** 2
+            print(f"Timestep: {self.timestep} Action error: {mse}")
+        o, r, d, i = self.env.step(action)
+        self.timestep += 1
+        return o, r, d, i
+    
+class ResampleGoalPCDWrapper(EnvWrapper):
+    def __init__(self, env, num_robot_points=2048):
+        """
+        Args:
+            env (EnvBase instance): The environment to wrap.
+            num_robot_points (int): number of points to sample from robot point cloud
+        """
+        super(ResampleGoalPCDWrapper, self).__init__(env=env)
+        self.num_robot_points = num_robot_points
+        self.fk_sampler = FrankaSampler("cpu", use_cache=True, num_fixed_points=4096)
+    
+    def reset(self):
+        """
+        Reset environment.
+
+        Returns:
+            observation (dict): initial observation dictionary.
+        """
+        self.timestep = 0
+        obs = self.env.reset()
+        self.goal_pcd = self.env.env.goal_pcd[:, :3]
+        self.goal_pcd = self.fk_sampler.sample(torch.tensor(self.env.goal_angles)).numpy()[0]
+        self.goal_pcd = self.goal_pcd[np.random.choice(self.goal_pcd.shape[0], self.num_robot_points, replace=False)] 
+        self.goal_pcd = np.concatenate([self.goal_pcd, np.zeros((self.goal_pcd.shape[0], 1)) * 2], axis=1)
+        return obs
+    
+    def step(self, action):
+        """
+        Step environment.
+
+        Args:
+            action (np.array): action to take
+
+        Returns:
+            observation (dict): observation dictionary.
+            reward (float): reward for this step
+            done (bool): whether the task is done
+            info (dict): extra information
+        """
+        o, r, d, i = self.env.step(action)
+        o['goal_angles'] = self.goal_pcd
+        self.timestep += 1
+        return o, r, d, i
