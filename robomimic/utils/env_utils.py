@@ -293,10 +293,11 @@ def wrap_env_from_config(env, config):
     if config.experiment.rollout.evaluate_on_dataset:
         from robomimic.envs.wrappers import EvaluateOnDatasetWrapper
         env = EvaluateOnDatasetWrapper(env, dataset_path=config.train.data, filter_key=config.experiment.rollout.evaluate_on_dataset_filter_key)
-    if config.observation.modalities.obs.pcd == 'goal_angles':
-        from robomimic.envs.wrappers import ResampleGoalPCDWrapper
-        env = ResampleGoalPCDWrapper(env)
-    if config.observation.modalities.obs.pcd == 'current_angles':
-        from robomimic.envs.wrappers import ResampleCurrentPCDWrapper
-        env = ResampleCurrentPCDWrapper(env)
+    if 'pcd' in config.observation.modalities.obs:
+        if config.observation.modalities.obs.pcd == 'goal_angles':
+            from robomimic.envs.wrappers import ResampleGoalPCDWrapper
+            env = ResampleGoalPCDWrapper(env)
+        if config.observation.modalities.obs.pcd == 'current_angles':
+            from robomimic.envs.wrappers import ResampleCurrentPCDWrapper
+            env = ResampleCurrentPCDWrapper(env)
     return env
