@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_rnn_state_pcd_goal_no_randomizer",
+        "name": "bc_rnn_state_pcd_goal_small",
         "validate": false,
         "logging": {
             "terminal_output_to_txt": false,

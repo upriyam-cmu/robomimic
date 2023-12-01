@@ -42,7 +42,7 @@ from robomimic.algo import algo_factory, RolloutPolicy
 from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
 
 
-def train(config, device, ckpt_path=None):
+def train(config, device, ckpt_path=None, exp_dirs=None):
     """
     Train a model using the algorithm.
     """
@@ -51,12 +51,15 @@ def train(config, device, ckpt_path=None):
     np.random.seed(config.train.seed)
     torch.manual_seed(config.train.seed)
 
-    torch.set_num_threads(2)
+    # torch.set_num_threads(2)
 
     print("\n============= New Training Run with Config =============")
     print(config)
     print("")
-    log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
+    if all(exp_dirs):
+        log_dir, ckpt_dir, video_dir = exp_dirs
+    else:
+        log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
 
     if config.experiment.logging.terminal_output_to_txt:
         # log stdout and stderr to a text file
@@ -407,7 +410,7 @@ def main(args):
     res_str = "finished run successfully!"
 
     try:
-        train(config, device=device, ckpt_path=ckpt_path)
+        train(config, device=device, ckpt_path=ckpt_path, exp_dirs=(args.log_dir, args.ckpt_dir, args.video_dir))
     except Exception as e:
         res_str = "run failed with error:\n{}\n\n{}".format(e, traceback.format_exc())
     print(res_str)
@@ -463,6 +466,29 @@ if __name__ == "__main__":
         help="set this flag to run a quick training run for debugging purposes"
     )
 
+    # log directory
+    parser.add_argument(
+        "--log_dir",
+        type=str,
+        default=None,
+        help="(optional) if provided, override the log directory defined in the config",
+    )
+
+    # ckpt directory
+    parser.add_argument(
+        "--ckpt_dir",
+        type=str,
+        default=None,
+        help="(optional) if provided, override the ckpt directory defined in the config",
+    )
+
+    # video directory
+    parser.add_argument(
+        "--video_dir",
+        type=str,
+        default=None,
+        help="(optional) if provided, override the video directory defined in the config",
+    )
     args = parser.parse_args()
     main(args)
 

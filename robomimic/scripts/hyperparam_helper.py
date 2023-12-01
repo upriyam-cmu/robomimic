@@ -36,6 +36,8 @@ Example usage:
     python hyperparam_helper.py --config /tmp/gen_configs/base.json --script /tmp/gen_configs/out.sh
 """
 import argparse
+import os
+import shutil
 
 import robomimic
 import robomimic.utils.hyperparam_utils as HyperparamUtils
@@ -55,27 +57,36 @@ def make_generator(config_file, script_file):
         name="",
         group=0,
         values=[
-            "../neural_mp/datasets/table_simple_100K.hdf5"
-            ],
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K.hdf5"
+        ],
+    )
+
+    generator.add_param(
+        key="experiment.logging.wandb_proj_name",
+        name="",
+        group=1,
+        values=[
+            "neural_mp"
+        ],
     )
 
     # use RNN with horizon 10
     generator.add_param(
         key="train.batch_size",
         name="bs", 
-        group=1, 
+        group=2, 
         values=[8, 16, 32],
     )
     generator.add_param(
         key="train.seq_length", 
         name="sl", 
-        group=2, 
+        group=3, 
         values=[2, 4, 8], 
     )
     generator.add_param(
         key="algo.rnn.horizon",
         name="", 
-        group=2, 
+        group=3, 
         values=[2, 4, 8], 
     )
 
@@ -83,7 +94,7 @@ def make_generator(config_file, script_file):
     generator.add_param(
         key="algo.optim_params.policy.learning_rate.initial", 
         name="plr", 
-        group=3, 
+        group=4, 
         values=[1e-3, 5e-3, 1e-4], 
     )
 
@@ -102,12 +113,16 @@ def make_generator(config_file, script_file):
 
 
 def main(args):
+    dirname = os.path.dirname(args.base_config)
+    os.makedirs(args.exp_dir, exist_ok=True)
+    config_path = os.path.join(args.exp_dir, os.path.basename(args.base_config))
+    shutil.copyfile(args.base_config, config_path)
 
     # make config generator
-    generator = make_generator(config_file=args.config, script_file=args.script)
+    generator = make_generator(config_file=config_path, script_file=args.script)
 
     # generate jsons and script
-    generator.generate_matrix_commands("neural_mp.sif")
+    generator.generate_matrix_commands("/projects/rsalakhugroup/containers/neural_mp.sif")
 
 
 if __name__ == "__main__":
@@ -115,10 +130,15 @@ if __name__ == "__main__":
 
     # Path to base json config - will override any defaults.
     parser.add_argument(
-        "--config",
+        "--base_config",
         type=str,
-        help="path to base config json that will be modified to generate jsons. The jsons will\
-            be generated in the same folder as this file.",
+        help="path to base config json that will be modified to generate jsons",
+    )
+
+    parser.add_argument(
+        "--exp_dir",
+        type=str,
+        help="path to folder where the jsons will be generated.",
     )
 
     # Script name to generate - will override any defaults
