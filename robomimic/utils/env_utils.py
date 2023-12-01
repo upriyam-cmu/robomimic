@@ -296,4 +296,7 @@ def wrap_env_from_config(env, config):
     if config.observation.modalities.obs.pcd == 'goal_angles':
         from robomimic.envs.wrappers import ResampleGoalPCDWrapper
         env = ResampleGoalPCDWrapper(env)
+    if config.observation.modalities.obs.pcd == 'current_angles':
+        from robomimic.envs.wrappers import ResampleCurrentPCDWrapper
+        env = ResampleCurrentPCDWrapper(env)
     return env
