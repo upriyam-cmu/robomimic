@@ -10,6 +10,8 @@ import itertools
 from collections import OrderedDict
 from copy import deepcopy
 
+from robomimic.scripts.launch_matrix_exp import run_on_slurm
+
 
 class ConfigGenerator(object):
     """
@@ -80,6 +82,20 @@ class ConfigGenerator(object):
         assert len(self.parameters) > 0, "must add parameters using add_param first!"
         generated_json_paths = self._generate_jsons()
         self._script_from_jsons(generated_json_paths)
+
+    def generate_matrix_commands(self, sif_path):
+        """
+        Generates json configs for the hyperparameter sweep using attributes
+        @self.parameters, @self.base_config_file, and @self.script_file,
+        all of which should have first been set externally by calling
+        @add_param, @set_base_config_file, and @set_script_file.
+        """
+        assert len(self.parameters) > 0, "must add parameters using add_param first!"
+        generated_json_paths = self._generate_jsons()
+        # self._script_from_jsons(generated_json_paths)
+        for path in generated_json_paths:
+            run_on_slurm(path, sif_path)
+
 
     def _name_for_experiment(self, base_name, parameter_values, parameter_value_names):
         """

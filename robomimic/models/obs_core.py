@@ -5,6 +5,7 @@ and randomizers (e.g. Randomizer, CropRandomizer).
 """
 
 import abc
+import time
 import numpy as np
 import textwrap
 import random
@@ -223,6 +224,7 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
 
         self.nets = nn.Sequential(*net_list)
         self.fk_sampler = FrankaSampler("cuda", use_cache=True, num_fixed_points=4096)
+        self.cache = {}
 
     def output_shape(self, input_shape):
         """
@@ -251,12 +253,88 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         batch_size = inputs.shape[0]
         if len(inputs.shape) == 2:
             inputs = self.fk_sampler.sample(inputs)
-            inputs = torch.cat([inputs, torch.zeros(inputs.shape[0], inputs.shape[1], 1).to(inputs.device)], dim=-1)
+            if (inputs.shape) in self.cache:
+                extra_col = self.cache[inputs.shape]
+            else:
+                extra_col = torch.zeros(inputs.shape[0], inputs.shape[1], 1, device=inputs.device)
+                self.cache[inputs.shape] = extra_col
+            inputs = torch.cat([inputs, extra_col], dim=-1)
             num_points = inputs.shape[1]
             random_indices = torch.randint(0, num_points, (batch_size, 2048), device=inputs.device)
             batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, 2048)
             inputs = inputs[batch_indices, random_indices, :]
-        
+        out = super(PcdCore, self).forward(inputs)
+        return out
+
+    def __repr__(self):
+        """Pretty print network."""
+        header = '{}'.format(str(self.__class__.__name__))
+        msg = ''
+        indent = ' ' * 2
+        msg += textwrap.indent(
+            "\ninput_shape={}\noutput_shape={}".format(self.input_shape, self.output_shape(self.input_shape)), indent)
+        msg += textwrap.indent("\nbackbone_net={}".format(self.backbone), indent)
+        msg = header + '(' + msg + '\n)'
+        return msg
+
+class LowDimCore(EncoderCore, BaseNets.MLP):
+    """
+    A network block that combines a visual backbone network with optional pooling
+    and linear layers.
+    """
+    def __init__(
+        self,
+        input_shape,
+        backbone_class=None,
+        backbone_kwargs=None,
+    ):
+        """
+        Args:
+            input_shape (tuple): shape of input (not including batch dimension)
+            backbone_class (str): class name for the visual backbone network. Defaults
+                to "ResNet18Conv".
+            pool_class (str): class name for the visual feature pooler (optional)
+                Common options are "SpatialSoftmax" and "SpatialMeanPool". Defaults to
+                "SpatialSoftmax".
+            backbone_kwargs (dict): kwargs for the visual backbone network (optional)
+            pool_kwargs (dict): kwargs for the visual feature pooler (optional)
+            flatten (bool): whether to flatten the visual features
+            feature_dimension (int): if not None, add a Linear layer to
+                project output into a desired feature dimension
+        """
+        super(LowDimCore, self).__init__(input_shape=input_shape)
+
+        if backbone_kwargs is None:
+            backbone_kwargs = dict()
+
+        if 'activation' in backbone_kwargs:
+            if 'leaky_relu' in backbone_kwargs['activation']:
+                backbone_kwargs['activation'] = nn.LeakyReLU
+        assert isinstance(backbone_class, str)
+        self.backbone = eval(backbone_class)(**backbone_kwargs)
+
+        net_list = [self.backbone]
+
+        self.nets = nn.Sequential(*net_list)
+
+    def output_shape(self, input_shape):
+        """
+        Function to compute output shape from inputs to this module. 
+
+        Args:
+            input_shape (iterable of int): shape of input. Does not include batch dimension.
+                Some modules may not need this argument, if their output does not depend 
+                on the size of the input, or if they assume fixed size input.
+
+        Returns:
+            out_shape ([int]): list of integers corresponding to output shape
+        """
+        return [self.backbone.nets.output_shape(input_shape)]
+
+    def forward(self, inputs):
+        """
+        Forward pass through visual core.
+        """
         return super(PcdCore, self).forward(inputs)
 
     def __repr__(self):

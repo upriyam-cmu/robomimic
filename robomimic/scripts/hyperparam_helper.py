@@ -49,63 +49,54 @@ def make_generator(config_file, script_file):
         base_config_file=config_file, script_file=script_file
     )
 
+
+    generator.add_param(
+        key="train.data",
+        name="",
+        group=0,
+        values=[
+            "../neural_mp/datasets/table_simple_100K.hdf5"
+            ],
+    )
+
     # use RNN with horizon 10
     generator.add_param(
-        key="algo.rnn.enabled",
-        name="", 
-        group=0, 
-        values=[True],
+        key="train.batch_size",
+        name="bs", 
+        group=1, 
+        values=[8, 16, 32],
     )
     generator.add_param(
         key="train.seq_length", 
-        name="", 
-        group=0, 
-        values=[10], 
+        name="sl", 
+        group=2, 
+        values=[2, 4, 8], 
     )
     generator.add_param(
         key="algo.rnn.horizon",
         name="", 
-        group=0, 
-        values=[10], 
+        group=2, 
+        values=[2, 4, 8], 
     )
 
     # LR - 1e-3, 1e-4
     generator.add_param(
         key="algo.optim_params.policy.learning_rate.initial", 
         name="plr", 
-        group=1, 
-        values=[1e-3, 1e-4], 
-    )
-
-    # GMM y / n
-    generator.add_param(
-        key="algo.gmm.enabled", 
-        name="gmm", 
-        group=2, 
-        values=[True, False], 
-        value_names=["t", "f"],
+        group=3, 
+        values=[1e-3, 5e-3, 1e-4], 
     )
 
     # RNN dim 400 + MLP dims (1024, 1024) vs. RNN dim 1000 + empty MLP dims ()
-    generator.add_param(
-        key="algo.rnn.hidden_dim", 
-        name="rnnd", 
-        group=3, 
-        values=[
-            400, 
-            1000,
-        ], 
-    )
-    generator.add_param(
-        key="algo.actor_layer_dims", 
-        name="mlp", 
-        group=3, 
-        values=[
-            [1024, 1024], 
-            [],
-        ], 
-        value_names=["1024", "0"],
-    )
+    # generator.add_param(
+    #     key="algo.rnn.hidden_dim", 
+    #     name="rnnd", 
+    #     group=3, 
+    #     values=[
+    #         400, 
+    #         1000,
+    #     ], 
+    # )
 
     return generator
 
@@ -116,7 +107,7 @@ def main(args):
     generator = make_generator(config_file=args.config, script_file=args.script)
 
     # generate jsons and script
-    generator.generate()
+    generator.generate_matrix_commands("neural_mp.sif")
 
 
 if __name__ == "__main__":

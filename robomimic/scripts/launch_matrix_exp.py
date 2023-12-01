@@ -12,7 +12,7 @@ SINGULARITY_PRE_CMDS = [
     "export D4RL_SUPPRESS_IMPORT_ERROR='1'",
 ]
 
-slurm_config = {
+slurm_config_dict = {
     'partition': "russ_reserved",
     'time': "72:00:00",
     'n_gpus': 1,
@@ -20,8 +20,9 @@ slurm_config = {
     'mem': "62g",
     'extra_flags': "--exclude=matrix-1-[4,8,12,16],matrix-0-[24,38]",
 }
+slurm_config = SlurmConfigMatrix(**slurm_config_dict)
 
-def run_on_slurm(script_to_run, args_for_script, sif_path):
+def run_on_slurm(config_path, sif_path):
     # Create log directory
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime(f"%Y_%m_%d_%H_%M_%S_{now.microsecond}")
@@ -31,8 +32,7 @@ def run_on_slurm(script_to_run, args_for_script, sif_path):
 
     # Generate the command
     python_cmd = subprocess.check_output("which python", shell=True).decode("utf-8")[:-1]
-    command = " ".join((python_cmd, script_to_run, *args_for_script))
-
+    command = " ".join((python_cmd, "--config ", config_path))
     singularity_pre_cmds = " && ".join(SINGULARITY_PRE_CMDS)
     slurm_cmd = wrap_command_with_sbatch_matrix(
         f"/opt/singularity/bin/singularity exec --nv {sif_path} /bin/zsh -c \"{singularity_pre_cmds} && source ~/.zshrc && {command}\"",
