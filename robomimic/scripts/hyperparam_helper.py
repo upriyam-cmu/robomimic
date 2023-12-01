@@ -67,7 +67,7 @@ def make_generator(config_file, script_file):
         group=1, 
         values=[8, 16, 32],
     )
-    
+
     generator.add_param(
         key="train.seq_length", 
         name="sl", 
@@ -86,7 +86,7 @@ def make_generator(config_file, script_file):
         key="algo.optim_params.policy.learning_rate.initial", 
         name="plr", 
         group=4, 
-        values=[1e-3, 5e-3, 1e-4], 
+        values=[1e-3, 5e-4, 1e-4], 
     )
 
     # RNN dim 400 + MLP dims (1024, 1024) vs. RNN dim 1000 + empty MLP dims ()
