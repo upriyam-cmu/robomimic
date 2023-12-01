@@ -160,7 +160,8 @@ def train(config, device, ckpt_path=None):
         batch_size=config.train.batch_size,
         shuffle=(train_sampler is None),
         num_workers=config.train.num_data_workers,
-        drop_last=True
+        drop_last=True,
+        pin_memory=True,
     )
 
     if config.experiment.validate:
@@ -173,7 +174,8 @@ def train(config, device, ckpt_path=None):
             batch_size=config.train.batch_size,
             shuffle=(valid_sampler is None),
             num_workers=num_workers,
-            drop_last=True
+            drop_last=True,
+            pin_memory=True,
         )
     else:
         valid_loader = None
@@ -347,8 +349,11 @@ def train(config, device, ckpt_path=None):
 def main(args):
 
     # set torch backend
+    import torch
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision("medium")
+    import torch._dynamo                                                    
+    torch._dynamo.config.suppress_errors = True
     
     # relative path to agent
     ckpt_path = args.agent

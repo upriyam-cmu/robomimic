@@ -24,6 +24,8 @@ from robomimic.models.base_nets import *
 from robomimic.utils.vis_utils import visualize_image_randomizer
 from robomimic.macros import VISUALIZE_RANDOMIZER
 
+from robofin.pointcloud.torch import FrankaSampler
+
 
 """
 ================================================
@@ -220,6 +222,7 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         net_list = [self.backbone]
 
         self.nets = nn.Sequential(*net_list)
+        self.fk_sampler = FrankaSampler("cuda", use_cache=True, num_fixed_points=4096)
 
     def output_shape(self, input_shape):
         """
@@ -245,6 +248,15 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         Forward pass through visual core.
         """
         ndim = len(self.input_shape)
+        batch_size = inputs.shape[0]
+        if len(inputs.shape) == 2:
+            inputs = self.fk_sampler.sample(inputs)
+            inputs = torch.cat([inputs, torch.zeros(inputs.shape[0], inputs.shape[1], 1).to(inputs.device)], dim=-1)
+            num_points = inputs.shape[1]
+            random_indices = torch.randint(0, num_points, (batch_size, 2048), device=inputs.device)
+            batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, 2048)
+            inputs = inputs[batch_indices, random_indices, :]
+        
         return super(PcdCore, self).forward(inputs)
 
     def __repr__(self):

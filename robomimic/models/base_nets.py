@@ -346,6 +346,7 @@ class RNN_Base(Module):
             batch_first=True,
             **rnn_kwargs,
         )
+        self.nets = torch.compile(self.nets)
 
         self._hidden_dim = rnn_hidden_dim
         self._num_layers = rnn_num_layers
@@ -906,6 +907,7 @@ class PointNetEncoder(Module):
     def __init__(self, encoder_size='small'):
         super(PointNetEncoder, self).__init__()
         net = MPiNetsPointNet(size=encoder_size)
+        net = torch.compile(net)
         self.nets = net
 
     def forward(self, inputs):
