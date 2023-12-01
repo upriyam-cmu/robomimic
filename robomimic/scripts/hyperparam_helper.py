@@ -48,7 +48,7 @@ def make_generator(config_file, script_file):
     Implement this function to setup your own hyperparameter scan!
     """
     generator = HyperparamUtils.ConfigGenerator(
-        base_config_file=config_file, script_file=script_file
+        base_config_file=config_file, script_file=script_file, wandb_proj_name='neural_mp',
     )
 
 
@@ -62,31 +62,22 @@ def make_generator(config_file, script_file):
     )
 
     generator.add_param(
-        key="experiment.logging.wandb_proj_name",
-        name="",
-        group=1,
-        values=[
-            "neural_mp"
-        ],
-    )
-
-    # use RNN with horizon 10
-    generator.add_param(
         key="train.batch_size",
         name="bs", 
-        group=2, 
+        group=1, 
         values=[8, 16, 32],
     )
+    
     generator.add_param(
         key="train.seq_length", 
         name="sl", 
-        group=3, 
+        group=2, 
         values=[2, 4, 8], 
     )
     generator.add_param(
         key="algo.rnn.horizon",
         name="", 
-        group=3, 
+        group=2, 
         values=[2, 4, 8], 
     )
 
