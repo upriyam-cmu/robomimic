@@ -337,7 +337,8 @@ class ResampleGoalPCDWrapper(EnvWrapper):
         """
         self.timestep = 0
         obs = self.env.reset()
-        self.goal_pcd = self.fk_sampler.sample(torch.tensor(self.env.goal_angles)).numpy()[0]
+        goal_angles = obs['goal_angles']
+        self.goal_pcd = self.fk_sampler.sample(torch.tensor(goal_angles)).numpy()[0]
         self.goal_pcd = self.goal_pcd[np.random.choice(self.goal_pcd.shape[0], self.num_robot_points, replace=False)] 
         self.goal_pcd = np.concatenate([self.goal_pcd, np.zeros((self.goal_pcd.shape[0], 1)) * 2], axis=1)
         obs['goal_angles'] = self.goal_pcd
