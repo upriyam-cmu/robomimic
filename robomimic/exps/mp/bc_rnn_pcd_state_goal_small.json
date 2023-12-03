@@ -160,11 +160,11 @@
     "observation": {
         "modalities": {
             "obs": {
-                "low_dim": ["current_angles"],
+                "low_dim": [],
                 "rgb": [],
                 "depth": [],
                 "scan": [],
-                "pcd": ["goal_angles"]
+                "pcd": ["current_angles", "goal_angles"]
             },
             "goal": {
                 "low_dim": [],

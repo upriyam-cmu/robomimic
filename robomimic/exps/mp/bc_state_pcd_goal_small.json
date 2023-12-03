@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_rnn_state_pcd_goal_small",
+        "name": "bc_state_pcd_goal_small",
         "validate": false,
         "logging": {
             "terminal_output_to_txt": false,
@@ -45,7 +45,7 @@
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": null,
-        "seq_length": 2,
+        "seq_length": 1,
         "pad_seq_length": true,
         "frame_stack": 1,
         "pad_frame_stack": true,
@@ -80,7 +80,10 @@
             "l1_weight": 0.0,
             "cos_weight": 0.0
         },
-        "actor_layer_dims": [],
+        "actor_layer_dims": [
+            1024,
+            1024
+        ],
         "gaussian": {
             "enabled": false,
             "fixed_std": false,
@@ -132,9 +135,9 @@
             ]
         },
         "rnn": {
-            "enabled": true,
-            "horizon": 2,
-            "hidden_dim": 1024,
+            "enabled": false,
+            "horizon": 10,
+            "hidden_dim": 400,
             "rnn_type": "LSTM",
             "num_layers": 2,
             "open_loop": false,
