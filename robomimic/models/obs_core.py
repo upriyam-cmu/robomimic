@@ -27,6 +27,12 @@ from robomimic.macros import VISUALIZE_RANDOMIZER
 
 from robofin.pointcloud.torch import FrankaSampler
 
+def vectorized_subsample(inputs, dim=1, num_points=2048):
+    batch_size = inputs.shape[0]
+    random_indices = torch.randint(0, inputs.shape[dim], (batch_size, num_points), device=inputs.device)
+    batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, num_points)
+    inputs = inputs[batch_indices, random_indices, :]
+    return inputs
 
 """
 ================================================
@@ -249,7 +255,6 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         """
         Forward pass through visual core.
         """
-        ndim = len(self.input_shape)
         batch_size = inputs.shape[0]
         if len(inputs.shape) == 2:
             inputs = self.fk_sampler.sample(inputs)
@@ -259,10 +264,16 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
                 extra_col = torch.zeros(inputs.shape[0], inputs.shape[1], 1, device=inputs.device)
                 self.cache[inputs.shape] = extra_col
             inputs = torch.cat([inputs, extra_col], dim=-1)
-            num_points = inputs.shape[1]
-            random_indices = torch.randint(0, num_points, (batch_size, 2048), device=inputs.device)
-            batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, 2048)
-            inputs = inputs[batch_indices, random_indices, :]
+            inputs = vectorized_subsample(inputs, dim=1, num_points=2048)
+        else:
+            robot_pcd = inputs[:, :4096]
+            target_robot_pcd = inputs[:, 4096:4096*2]
+            object_pcd = inputs[:, 4096*2:]
+
+            robot_pcd = vectorized_subsample(robot_pcd, dim=1, num_points=2048)
+            target_robot_pcd = vectorized_subsample(target_robot_pcd, dim=1, num_points=2048)
+            object_pcd = vectorized_subsample(object_pcd, dim=1, num_points=4096)
+            inputs = torch.cat([robot_pcd, target_robot_pcd, object_pcd], dim=1)
         out = super(PcdCore, self).forward(inputs)
         return out
 
