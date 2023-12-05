@@ -265,6 +265,8 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
                 self.cache[inputs.shape] = extra_col
             inputs = torch.cat([inputs, extra_col], dim=-1)
             inputs = vectorized_subsample(inputs, dim=1, num_points=2048)
+        elif len(inputs.shape) == 3 and inputs.shape[1] != 14336:
+            pass
         else:
             robot_pcd = inputs[:, :4096]
             target_robot_pcd = inputs[:, 4096:4096*2]
