@@ -24,15 +24,9 @@ from robomimic.utils.python_utils import extract_class_init_kwargs_from_dict
 from robomimic.models.base_nets import *
 from robomimic.utils.vis_utils import visualize_image_randomizer
 from robomimic.macros import VISUALIZE_RANDOMIZER
+from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 
 from robofin.pointcloud.torch import FrankaSampler
-
-def vectorized_subsample(inputs, dim=1, num_points=2048):
-    batch_size = inputs.shape[0]
-    random_indices = torch.randint(0, inputs.shape[dim], (batch_size, num_points), device=inputs.device)
-    batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, num_points)
-    inputs = inputs[batch_indices, random_indices, :]
-    return inputs
 
 """
 ================================================
@@ -229,7 +223,7 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         net_list = [self.backbone]
 
         self.nets = nn.Sequential(*net_list)
-        self.fk_sampler = FrankaSampler("cuda", use_cache=True, num_fixed_points=4096)
+        self.fk_sampler = FrankaSampler("cpu", use_cache=True, num_fixed_points=4096)
         self.cache = {}
 
     def output_shape(self, input_shape):
@@ -257,25 +251,14 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         """
         batch_size = inputs.shape[0]
         if len(inputs.shape) == 2:
-            inputs = self.fk_sampler.sample(inputs)
-            if (inputs.shape) in self.cache:
-                extra_col = self.cache[inputs.shape]
-            else:
-                extra_col = torch.zeros(inputs.shape[0], inputs.shape[1], 1, device=inputs.device)
-                self.cache[inputs.shape] = extra_col
-            inputs = torch.cat([inputs, extra_col], dim=-1)
-            inputs = vectorized_subsample(inputs, dim=1, num_points=2048)
-        elif len(inputs.shape) == 3 and inputs.shape[1] != 14336:
-            pass
-        else:
-            robot_pcd = inputs[:, :4096]
-            target_robot_pcd = inputs[:, 4096:4096*2]
-            object_pcd = inputs[:, 4096*2:]
-
-            robot_pcd = vectorized_subsample(robot_pcd, dim=1, num_points=2048)
-            target_robot_pcd = vectorized_subsample(target_robot_pcd, dim=1, num_points=2048)
-            object_pcd = vectorized_subsample(object_pcd, dim=1, num_points=4096)
-            inputs = torch.cat([robot_pcd, target_robot_pcd, object_pcd], dim=1)
+            # for the env, we need to convert to pcd
+            pcd_params = inputs # (batch_size, -1)
+            pcds = []
+            for idx in range(batch_size):
+                pcd = compute_full_pcd(pcd_params[idx:idx+1].cpu().numpy(), 2048, 4096, self.fk_sampler)[0]
+                pcds.append(pcd)
+            pcds = np.stack(pcds, axis=0)
+            inputs = torch.from_numpy(pcds).float().to(inputs.device)
         out = super(PcdCore, self).forward(inputs)
         return out
 
