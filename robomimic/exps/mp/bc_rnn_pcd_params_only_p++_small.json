@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc_rnn_state_pcd_goal_small",
+        "name": "bc_rnn_mp_pcd_only",
         "validate": false,
         "logging": {
             "terminal_output_to_txt": false,
@@ -38,8 +38,8 @@
     "train": {
         "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_table_simple_1600_224_smoothed.hdf5",
         "output_dir": "logs/mp/trained_models",
-        "num_data_workers": 4,
-        "hdf5_cache_mode": "all",
+        "num_data_workers": 16,
+        "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_load_next_obs": false,
         "hdf5_normalize_obs": false,
@@ -164,7 +164,7 @@
                 "rgb": [],
                 "depth": [],
                 "scan": [],
-                "pcd": ["current_angles", "goal_angles"]
+                "pcd": ["compute_pcd_params"]
             },
             "goal": {
                 "low_dim": [],
@@ -215,8 +215,7 @@
                     }
                 },
                 "obs_randomizer_class": null,
-                "obs_randomizer_kwargs": {
-                }
+                "obs_randomizer_kwargs": {}
             },
             "depth": {
                 "core_class": "VisualCore",
