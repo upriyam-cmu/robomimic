@@ -461,7 +461,7 @@ def should_save_from_rollout_logs(
     )
 
 
-def save_model(model, config, env_meta, shape_meta, ckpt_path, obs_normalization_stats=None):
+def save_model(model, config, env_meta, shape_meta, ckpt_path, log_dir, ckpt_dir, video_dir, epoch, obs_normalization_stats=None):
     """
     Save model to a torch pth file.
 
@@ -489,6 +489,10 @@ def save_model(model, config, env_meta, shape_meta, ckpt_path, obs_normalization
         algo_name=config.algo_name,
         env_metadata=env_meta,
         shape_metadata=shape_meta,
+        log_dir=log_dir,
+        ckpt_dir=ckpt_dir,
+        video_dir=video_dir,
+        epoch=epoch,
     )
     if obs_normalization_stats is not None:
         assert config.train.hdf5_normalize_obs

@@ -42,7 +42,7 @@ from robomimic.algo import algo_factory, RolloutPolicy
 from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
 
 
-def train(config, device, ckpt_path=None, exp_dirs=None):
+def train(config, device, ckpt_path=None, ckpt_dict=None):
     """
     Train a model using the algorithm.
     """
@@ -56,10 +56,12 @@ def train(config, device, ckpt_path=None, exp_dirs=None):
     print("\n============= New Training Run with Config =============")
     print(config)
     print("")
-    if all(exp_dirs):
-        log_dir, ckpt_dir, video_dir = exp_dirs
+    if ckpt_dict:
+        log_dir, ckpt_dir, video_dir = ckpt_dict["log_dir"], ckpt_dict["ckpt_dir"], ckpt_dict["video_dir"]
+        epoch = ckpt_dict["epoch"]
     else:
         log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
+        epoch = 1
 
     if config.experiment.logging.terminal_output_to_txt:
         # log stdout and stderr to a text file
@@ -200,13 +202,26 @@ def train(config, device, ckpt_path=None, exp_dirs=None):
     train_num_steps = config.experiment.epoch_every_n_steps
     valid_num_steps = config.experiment.validation_epoch_every_n_steps
 
-    for epoch in range(1, config.train.num_epochs + 1): # epoch numbers start at 1
+    for epoch in range(epoch, config.train.num_epochs + 1): # epoch numbers start at 1
         step_log = TrainUtils.run_epoch(
             model=model,
             data_loader=train_loader,
             epoch=epoch,
             num_steps=train_num_steps,
             obs_normalization_stats=obs_normalization_stats,
+        )
+        # checkpoint every epoch (1K steps)
+        TrainUtils.save_model(
+            model=model,
+            config=config,
+            env_meta=env_meta,
+            shape_meta=shape_meta,
+            ckpt_path=os.path.join(ckpt_dir, "model_latest.pth"),
+            obs_normalization_stats=obs_normalization_stats,
+            log_dir=log_dir,
+            ckpt_dir=ckpt_dir,
+            video_dir=video_dir,
+            epoch=epoch,
         )
         model.on_epoch_end(epoch)
 
@@ -337,6 +352,10 @@ def train(config, device, ckpt_path=None, exp_dirs=None):
                 shape_meta=shape_meta,
                 ckpt_path=os.path.join(ckpt_dir, epoch_ckpt_name + ".pth"),
                 obs_normalization_stats=obs_normalization_stats,
+                log_dir=log_dir,
+                ckpt_dir=ckpt_dir,
+                video_dir=video_dir,
+                epoch=epoch,
             )
 
         # Finally, log memory usage in MB
@@ -360,6 +379,7 @@ def main(args):
     
     # relative path to agent
     ckpt_path = args.agent
+    ckpt_dict = None
 
     if ckpt_path is not None:
         ckpt_dict = FileUtils.load_dict_from_checkpoint(ckpt_path=ckpt_path)
@@ -410,7 +430,7 @@ def main(args):
     res_str = "finished run successfully!"
 
     try:
-        train(config, device=device, ckpt_path=ckpt_path, exp_dirs=(args.log_dir, args.ckpt_dir, args.video_dir))
+        train(config, device=device, ckpt_path=ckpt_path, ckpt_dict=ckpt_dict)
     except Exception as e:
         res_str = "run failed with error:\n{}\n\n{}".format(e, traceback.format_exc())
     print(res_str)
@@ -464,30 +484,6 @@ if __name__ == "__main__":
         "--debug",
         action='store_true',
         help="set this flag to run a quick training run for debugging purposes"
-    )
-
-    # log directory
-    parser.add_argument(
-        "--log_dir",
-        type=str,
-        default=None,
-        help="(optional) if provided, override the log directory defined in the config",
-    )
-
-    # ckpt directory
-    parser.add_argument(
-        "--ckpt_dir",
-        type=str,
-        default=None,
-        help="(optional) if provided, override the ckpt directory defined in the config",
-    )
-
-    # video directory
-    parser.add_argument(
-        "--video_dir",
-        type=str,
-        default=None,
-        help="(optional) if provided, override the video directory defined in the config",
     )
     args = parser.parse_args()
     main(args)

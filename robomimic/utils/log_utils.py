@@ -82,6 +82,7 @@ class DataLogger(object):
                         name=config.experiment.name,
                         dir=log_dir,
                         mode=("offline" if attempt == num_attempts - 1 else "online"),
+                        resume=True
                     )
 
                     # set up info for identifying experiment
