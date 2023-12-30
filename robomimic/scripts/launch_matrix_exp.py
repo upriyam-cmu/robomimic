@@ -1,26 +1,25 @@
 import json
 import os
-import shutil
 import subprocess
 import datetime
 import time
-import dateutil.tz
 import argparse
-from doodad.slurm.slurm_util import wrap_command_with_sbatch_matrix, SlurmConfigMatrix
 import robomimic
 from robomimic.config.base_config import config_factory
+import submitit
+
 
 def get_exp_dir(config, auto_remove_exp_dir=False):
     """
     Create experiment directory from config. If an identical experiment directory
-    exists and @auto_remove_exp_dir is False (default), the function will prompt 
+    exists and @auto_remove_exp_dir is False (default), the function will prompt
     the user on whether to remove and replace it, or keep the existing one and
     add a new subdirectory with the new timestamp for the current run.
 
     Args:
         auto_remove_exp_dir (bool): if True, automatically remove the existing experiment
             folder if it exists at the same path.
-    
+
     Returns:
         log_dir (str): path to created log directory (sub-folder in experiment directory)
         output_dir (str): path to created models directory (sub-folder in experiment directory)
@@ -30,84 +29,108 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
     """
     # timestamp for directory names
     t_now = time.time()
-    time_str = datetime.datetime.fromtimestamp(t_now).strftime('%Y%m%d%H%M%S')
+    time_str = datetime.datetime.fromtimestamp(t_now).strftime("%Y%m%d%H%M%S")
 
     # create directory for where to dump model parameters, tensorboard logs, and videos
     base_output_dir = os.path.expanduser(config.train.output_dir)
     if not os.path.isabs(base_output_dir):
         # relative paths are specified relative to robomimic module location
         base_output_dir = os.path.join(robomimic.__path__[0], base_output_dir)
-    base_output_dir = os.path.join(base_output_dir, config.experiment.name)
-    if os.path.exists(base_output_dir):
-        if not auto_remove_exp_dir:
-            ans = input("WARNING: model directory ({}) already exists! \noverwrite? (y/n)\n".format(base_output_dir))
-        else:
-            ans = "y"
-        if ans == "y":
-            print("REMOVING")
-            shutil.rmtree(base_output_dir)
-
-    # only make model directory if model saving is enabled
-    output_dir = None
-    if config.experiment.save.enabled:
-        output_dir = os.path.join(base_output_dir, time_str, "models")
-        os.makedirs(output_dir)
-
-    # tensorboard directory
-    log_dir = os.path.join(base_output_dir, time_str, "logs")
-    os.makedirs(log_dir)
-
-    # video directory
-    video_dir = os.path.join(base_output_dir, time_str, "videos")
-    os.makedirs(video_dir)
-    return log_dir, output_dir, video_dir
+    base_output_dir = os.path.join(base_output_dir, config.experiment.name, time_str)
+    return base_output_dir
 
 
-SINGULARITY_PRE_CMDS = [
-    "export MUJOCO_GL='egl'",
-    "export MKL_THREADING_LAYER=GNU",
-    "export D4RL_SUPPRESS_IMPORT_ERROR='1'",
-]
-
-slurm_config_dict = {
-    'partition': "russ_reserved",
-    'time': "72:00:00",
-    'n_gpus': 1,
-    'n_cpus_per_gpu': 20,
-    'mem': "62g",
-    'extra_flags': "--exclude=matrix-1-[4,8,12,16],matrix-0-[24,38]",
+slurm_additional_parameters = {
+    "partition": "russ_reserved",
+    "time": "6:00:00",
+    "gpus": 1,
+    "cpus_per_gpu": 20,
+    "mem": "62g",
+    "exclude": "matrix-1-[4,8,10,12,16],matrix-0-[24,38]",
+    # "nodelist": "grogu-1-3"
 }
-slurm_config = SlurmConfigMatrix(**slurm_config_dict)
+
+
+class WrappedCallable(submitit.helpers.Checkpointable):
+    def __init__(self, output_dir, sif_path, python_path, file_path, config_path):
+        self.output_dir = output_dir
+        self.sif_path = sif_path
+        self.python_path = python_path
+        self.file_path = file_path
+        self.config_path = config_path
+        self.p = None
+
+    def __call__(self, checkpoint_path=None):
+        """
+        wrapped main function for launching diffusion policy code.
+        we take in cfg_dict instead of cfg because we need to rebuild the config
+        for some reason if we don't do this, the cfg resolve phase fails
+        """
+        # launch function in a singularity container:
+        singularity_path = "singularity"
+        output_dir = self.output_dir
+        if checkpoint_path is not None:
+            output_dir = None # get output_dir from ckpt
+        cmd = f"{singularity_path} exec --nv {self.sif_path} {self.python_path} {self.file_path} --config {self.config_path} \
+            --output_dir {output_dir} --agent {checkpoint_path}"
+        self.p = subprocess.Popen(cmd, shell=True)
+        while True:
+            pass
+
+    def checkpoint(self, checkpointpath: str) -> submitit.helpers.DelayedSubmission:
+        print("sending checkpoint signal")
+        import signal
+
+        os.kill(self.p.pid, signal.SIGUSR1)
+        print("wait for 30s")
+        time.sleep(30)
+        print("setup new callable")
+        wrapped_callable = WrappedCallable(
+            self.output_dir, self.sif_path, self.python_path, self.file_path
+        )
+        ckpt_dir = os.path.join(self.output_dir, "models")
+        checkpoint_path = os.path.join(ckpt_dir, "model_latest.pth")
+        print("RESUBMITTING")
+        return submitit.helpers.DelayedSubmission(wrapped_callable, checkpoint_path)
+
 
 def run_on_slurm(config_path, sif_path):
-    ext_cfg = json.load(open(config_path, 'r'))
+    ext_cfg = json.load(open(config_path, "r"))
     config = config_factory(ext_cfg["algo_name"])
     # update config with external json - this will throw errors if
     # the external config has keys not present in the base algo config
     with config.values_unlocked():
         config.update(ext_cfg)
-    log_dir, ckpt_dir, video_dir = get_exp_dir(config)
+    output_dir = get_exp_dir(config)
 
     # Generate the command
-    python_cmd = subprocess.check_output("which python", shell=True).decode("utf-8")[:-1]
-    command = " ".join((python_cmd, "robomimic/scripts/train.py --config ", config_path, " --log_dir ", log_dir, " --ckpt_dir ", ckpt_dir, " --video_dir ", video_dir))
-    singularity_pre_cmds = " && ".join(SINGULARITY_PRE_CMDS)
-    slurm_cmd = wrap_command_with_sbatch_matrix(
-        f"/opt/singularity/bin/singularity exec --nv {sif_path} /bin/zsh -c \"{singularity_pre_cmds} && source ~/.zshrc && {command}\"",
-        slurm_config,
-        log_dir,
+    python_cmd = subprocess.check_output("which python", shell=True).decode("utf-8")[
+        :-1
+    ]
+    executor = submitit.AutoExecutor(
+        folder=output_dir + "/%j",
     )
+    executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters)
+    # absolute path to robomimic/scripts/train.py
+    file_path = os.path.join(robomimic.__path__[0], "scripts/train.py")
+    wrapped_callable = WrappedCallable(
+        output_dir, sif_path, python_cmd, file_path, config_path
+    )
+    job = executor.submit(wrapped_callable, None)
 
-    # Execute the command
-    print(slurm_cmd)
-    os.system(slurm_cmd)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run a Python script on Slurm with Singularity")
+    parser = argparse.ArgumentParser(
+        description="Run a Python script on Slurm with Singularity"
+    )
     parser.add_argument("script", help="Path to the Python script to run")
-    parser.add_argument("script_args", nargs="*", help="Arguments for the Python script")
-    parser.add_argument("--sif", required=True, help="Path to the Singularity .sif file")
-    
+    parser.add_argument(
+        "script_args", nargs="*", help="Arguments for the Python script"
+    )
+    parser.add_argument(
+        "--sif", required=True, help="Path to the Singularity .sif file"
+    )
+
     args = parser.parse_args()
 
     run_on_slurm(args.script, args.script_args, args.sif, args.conda_env)
