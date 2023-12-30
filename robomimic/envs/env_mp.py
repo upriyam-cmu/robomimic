@@ -96,14 +96,7 @@ class EnvMP(EB.EnvBase):
         Returns:
             observation (dict): initial observation dictionary.
         """
-        # retry reset until it succeeds (for randomized obstacles this is important)
-        failed = True
-        while failed:
-            try:
-                self._current_obs = self.env.reset()
-                failed = False
-            except:
-                failed = True
+        self._current_obs = self.env.reset()
         self._current_reward = None
         self._current_done = self.is_success()
         return self.get_observation(self._current_obs)
