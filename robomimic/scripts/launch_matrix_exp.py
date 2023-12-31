@@ -42,7 +42,7 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
 
 slurm_additional_parameters = {
     "partition": "deepaklong",
-    "time": "00:03:00",
+    "time": "2-00:00:00",
     "gpus": 1,
     "cpus_per_gpu": 16,
     "mem": "100g",
