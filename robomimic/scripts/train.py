@@ -46,7 +46,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
     """
     Train a model using the algorithm.
     """
-
+    os.environ['WANDB_API_KEY'] = "010fcba9b0530d8e86f54a8e7e68725a06be7dba"
     # first set seeds
     np.random.seed(config.train.seed)
     torch.manual_seed(config.train.seed)
@@ -59,10 +59,13 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
     if ckpt_dict:
         log_dir, ckpt_dir, video_dir = ckpt_dict["log_dir"], ckpt_dict["ckpt_dir"], ckpt_dict["video_dir"]
         epoch = ckpt_dict["epoch"]
-    elif output_dir is not None:
+    elif output_dir is not None and output_dir != 'None':
         log_dir = os.path.join(output_dir, "logs")
         ckpt_dir = os.path.join(output_dir, "models")
         video_dir = os.path.join(output_dir, "videos")
+        os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(ckpt_dir, exist_ok=True)
+        os.makedirs(video_dir, exist_ok=True)
         epoch = 1
     else:
         log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
@@ -127,7 +130,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
         log_wandb=config.experiment.logging.log_wandb,
     )
     # restore policy
-    if ckpt_path is not None:
+    if ckpt_path is not None and ckpt_path != 'None':
         model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True)
     else:
         model = algo_factory(
@@ -404,7 +407,7 @@ def main(args):
     ckpt_path = args.agent
     ckpt_dict = None
 
-    if ckpt_path is not None:
+    if ckpt_path is not None and ckpt_path != 'None':
         ckpt_dict = FileUtils.load_dict_from_checkpoint(ckpt_path=ckpt_path)
         config, _ = FileUtils.config_from_checkpoint(ckpt_dict=ckpt_dict)
         config.unlock()

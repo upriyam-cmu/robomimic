@@ -57,37 +57,37 @@ def make_generator(config_file, script_file):
         name="",
         group=0,
         values=[
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K.hdf5"
+            "/home/sbahl2/research/neural_mp/neural_mp/datasets/table_simple_2K_pcd_params_obs_delta_true.hdf5"
         ],
     )
 
-    generator.add_param(
-        key="train.batch_size",
-        name="bs", 
-        group=1, 
-        values=[8, 16, 32],
-    )
+    #generator.add_param(
+    #    key="train.batch_size",
+    #    name="bs", 
+    #    group=1, 
+    #    values=[8, 16, 32],
+    #)
 
-    generator.add_param(
-        key="train.seq_length", 
-        name="sl", 
-        group=2, 
-        values=[2, 4, 8], 
-    )
-    generator.add_param(
-        key="algo.rnn.horizon",
-        name="", 
-        group=2, 
-        values=[2, 4, 8], 
-    )
+    #generator.add_param(
+    #    key="train.seq_length", 
+    #    name="sl", 
+    #    group=2, 
+    #    values=[2, 4, 8], 
+    #)
+    #generator.add_param(
+    #    key="algo.rnn.horizon",
+    #    name="", 
+    #    group=2, 
+    #    values=[2, 4, 8], 
+    #)
 
     # LR - 1e-3, 1e-4
-    generator.add_param(
-        key="algo.optim_params.policy.learning_rate.initial", 
-        name="plr", 
-        group=4, 
-        values=[1e-3, 5e-4, 1e-4], 
-    )
+    #generator.add_param(
+    #    key="algo.optim_params.policy.learning_rate.initial", 
+    #    name="plr", 
+    #    group=4, 
+    #    values=[1e-3, 5e-4, 1e-4], 
+    #)
 
     # RNN dim 400 + MLP dims (1024, 1024) vs. RNN dim 1000 + empty MLP dims ()
     # generator.add_param(
@@ -113,8 +113,9 @@ def main(args):
     generator = make_generator(config_file=config_path, script_file=args.script)
 
     # generate jsons and script
-    generator.generate_matrix_commands("/projects/rsalakhugroup/containers/neural_mp.sif")
-
+    import neural_mp
+    sif_path = os.path.join(neural_mp.__file__[:-len("neural_mp/__init__.py")], "containers/neural_mp_bash.sif")
+    generator.generate_matrix_commands(sif_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
