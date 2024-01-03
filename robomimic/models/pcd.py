@@ -5,8 +5,6 @@ import numpy as np
 from typing import Tuple
 from pointnet2_ops.pointnet2_modules import PointnetSAModule
 
-from robofin.pointcloud.torch import FrankaSampler
-
 class MPiNetsPointNet(pl.LightningModule):
     def __init__(self, size='small'):
         super().__init__()

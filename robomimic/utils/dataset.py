@@ -15,7 +15,6 @@ import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.log_utils as LogUtils
 
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
-from robofin.pointcloud.torch import FrankaSampler
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -84,8 +83,6 @@ class SequenceDataset(torch.utils.data.Dataset):
             load_next_obs (bool): whether to load next_obs from the dataset
         """
         super(SequenceDataset, self).__init__()
-
-        self.fk_sampler = FrankaSampler("cpu", use_cache=True, num_fixed_points=4096)
 
         self.hdf5_path = os.path.expanduser(hdf5_path)
         self.hdf5_use_swmr = hdf5_use_swmr
@@ -548,7 +545,6 @@ class SequenceDataset(torch.utils.data.Dataset):
                 pcd_params=obs[k],
                 num_robot_points=2048,
                 num_obstacle_points=4096,
-                fk_sampler=self.fk_sampler
             )
         return obs
 

@@ -26,7 +26,6 @@ from robomimic.utils.vis_utils import visualize_image_randomizer
 from robomimic.macros import VISUALIZE_RANDOMIZER
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 
-from robofin.pointcloud.torch import FrankaSampler
 
 """
 ================================================
@@ -223,7 +222,6 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         net_list = [self.backbone]
 
         self.nets = nn.Sequential(*net_list)
-        self.fk_sampler = FrankaSampler("cpu", use_cache=True, num_fixed_points=4096)
         self.cache = {}
 
     def output_shape(self, input_shape):
@@ -255,7 +253,7 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
             pcd_params = inputs # (batch_size, -1)
             pcds = []
             for idx in range(batch_size):
-                pcd = compute_full_pcd(pcd_params[idx:idx+1].cpu().numpy(), 2048, 4096, self.fk_sampler)[0]
+                pcd = compute_full_pcd(pcd_params[idx:idx+1].cpu().numpy(), 2048, 4096)[0]
                 pcds.append(pcd)
             pcds = np.stack(pcds, axis=0)
             inputs = torch.from_numpy(pcds).float().to(inputs.device)
