@@ -41,13 +41,13 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
 
 
 slurm_additional_parameters = {
-    "partition": "russ_reserved",
-    "time": "6:00:00",
+    "partition": "deepaklong",
+    "time": "2-00:00:00",
     "gpus": 1,
-    "cpus_per_gpu": 20,
-    "mem": "62g",
-    "exclude": "matrix-1-[4,8,10,12,16],matrix-0-[24,38]",
-    # "nodelist": "grogu-1-3"
+    "cpus_per_gpu": 16,
+    "mem": "100g",
+    #"exclude": "matrix-1-[4,8,10,12,16],matrix-0-[24,38]",
+    "nodelist": "grogu-1-3"
 }
 
 
@@ -62,9 +62,6 @@ class WrappedCallable(submitit.helpers.Checkpointable):
 
     def __call__(self, checkpoint_path=None):
         """
-        wrapped main function for launching diffusion policy code.
-        we take in cfg_dict instead of cfg because we need to rebuild the config
-        for some reason if we don't do this, the cfg resolve phase fails
         """
         # launch function in a singularity container:
         singularity_path = "singularity"
@@ -86,7 +83,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         time.sleep(30)
         print("setup new callable")
         wrapped_callable = WrappedCallable(
-            self.output_dir, self.sif_path, self.python_path, self.file_path
+            self.output_dir, self.sif_path, self.python_path, self.file_path, self.config_path
         )
         ckpt_dir = os.path.join(self.output_dir, "models")
         checkpoint_path = os.path.join(ckpt_dir, "model_latest.pth")
