@@ -13,6 +13,7 @@ import torch.utils.data
 import robomimic.utils.tensor_utils as TensorUtils
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.log_utils as LogUtils
+from tqdm import tqdm
 
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 
@@ -152,8 +153,8 @@ class SequenceDataset(torch.utils.data.Dataset):
                 self.hdf5_cache = None
         else:
             self.hdf5_cache = None
-
         self.close_and_delete_hdf5_handle()
+        self.ep_to_hdf5_file = None
 
     def load_demo_info(self, filter_by_attribute=None, demos=None):
         """
@@ -186,8 +187,8 @@ class SequenceDataset(torch.utils.data.Dataset):
 
         # determine index mapping
         self.total_num_sequences = 0
-        for ep in self.demos:
-            demo_length = self.hdf5_file["data/{}".format(ep)].attrs["num_samples"]
+        for ep in tqdm(self.demos):
+            demo_length = int(self.hdf5_file["data/{}".format(ep)].attrs["num_samples"])
             self._demo_id_to_start_indices[ep] = self.total_num_sequences
             self._demo_id_to_demo_length[ep] = demo_length
 
@@ -373,7 +374,8 @@ class SequenceDataset(torch.utils.data.Dataset):
         Helper utility to get a dataset for a specific demonstration.
         Takes into account whether the dataset has been loaded into memory.
         """
-
+        if self.ep_to_hdf5_file is None:
+            self.ep_to_hdf5_file = {ep: self.hdf5_file for ep in self.demos}
         # check if this key should be in memory
         key_should_be_in_memory = (self.hdf5_cache_mode in ["all", "low_dim"])
         if key_should_be_in_memory:
@@ -395,7 +397,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         else:
             # read from file
             hd5key = "data/{}/{}".format(ep, key)
-            ret = self.hdf5_file[hd5key]
+            ret = self.ep_to_hdf5_file[ep][hd5key]
         return ret
 
     def __getitem__(self, index):
