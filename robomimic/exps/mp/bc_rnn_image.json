@@ -29,7 +29,7 @@
         "rollout": {
             "enabled": true,
             "n": 50,
-            "horizon": 100,
+            "horizon": 150,
             "rate": 50,
             "warmstart": 0,
             "terminate_on_success": true
@@ -38,14 +38,14 @@
     "train": {
         "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_trajs_2000_imsize_84.hdf5",
         "output_dir": "logs/mp/trained_models",
-        "num_data_workers": 4,
+        "num_data_workers": 16,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_load_next_obs": false,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 10,
+        "seq_length": 2,
         "pad_seq_length": true,
         "frame_stack": 1,
         "pad_frame_stack": true,
@@ -133,8 +133,8 @@
         },
         "rnn": {
             "enabled": true,
-            "horizon": 10,
-            "hidden_dim": 1000,
+            "horizon": 2,
+            "hidden_dim": 1024,
             "rnn_type": "LSTM",
             "num_layers": 2,
             "open_loop": false,
@@ -165,7 +165,8 @@
                     "goal_angles"
                 ],
                 "rgb": [
-                    "default_image"
+                    "front_image",
+                    "wrist_image"
                 ],
                 "depth": [],
                 "scan": []
