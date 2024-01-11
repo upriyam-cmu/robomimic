@@ -400,6 +400,9 @@ def main(args):
     import torch
     torch.backends.cudnn.benchmark = True
     torch.set_float32_matmul_precision("medium")
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
     import torch._dynamo                                                    
     torch._dynamo.config.suppress_errors = True
     

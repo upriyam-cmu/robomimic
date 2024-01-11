@@ -376,7 +376,7 @@ def process_frame(frame, channel_dim, scale):
         processed_frame (np.array or torch.Tensor): processed frame
     """
     # Channel size should either be 3 (RGB) or 1 (depth)
-    assert (frame.shape[-1] == channel_dim)
+    # assert (frame.shape[-1] == channel_dim)
     frame = TU.to_float(frame)
     frame = frame / scale
     frame = frame.clip(0.0, 1.0)

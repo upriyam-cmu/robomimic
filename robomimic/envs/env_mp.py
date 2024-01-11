@@ -32,6 +32,8 @@ from pytorch3d.renderer import (
     NormWeightedCompositor
 )
 
+from neural_mp.envs.franka_pybullet_env import depth_to_rgb
+
 
 class EnvMP(EB.EnvBase):
     """Wrapper class for motion planning envs"""
@@ -148,6 +150,9 @@ class EnvMP(EB.EnvBase):
             ob_return[k] = obs[k].copy()
             if k.endswith('image'):
                 #TODO: figure out how to do this correctly without hacking
+                ob_return[k] = ob_return[k].transpose(2, 0, 1)
+            if k.endswith('depth'):
+                ob_return[k] = depth_to_rgb(ob_return[k])
                 ob_return[k] = ob_return[k].transpose(2, 0, 1)
         return ob_return
 

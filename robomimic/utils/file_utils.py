@@ -142,6 +142,9 @@ def get_shape_metadata_from_dataset(dataset_path, all_obs_keys=None, verbose=Fal
 
     for k in sorted(all_obs_keys):
         initial_shape = demo["obs/{}".format(k)].shape[1:]
+        if k.endswith('depth'):
+            # add additional 2 channels for depth
+            initial_shape = (initial_shape[0], initial_shape[1], 3)
         if verbose:
             print("obs key {} with shape {}".format(k, initial_shape))
         # Store processed shape for each obs key

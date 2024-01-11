@@ -16,6 +16,7 @@ import robomimic.utils.log_utils as LogUtils
 from tqdm import tqdm
 
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
+from neural_mp.envs.franka_pybullet_env import depth_to_rgb
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -548,6 +549,11 @@ class SequenceDataset(torch.utils.data.Dataset):
                 num_robot_points=2048,
                 num_obstacle_points=4096,
             )
+            if 'depth' in k:
+                new_obs = []
+                for idx in range(obs[k].shape[0]):
+                    new_obs.append(depth_to_rgb(obs[k][idx]))
+                obs[k] = np.array(new_obs)
         return obs
 
     def get_dataset_sequence_from_demo(self, demo_id, index_in_demo, keys, num_frames_to_stack=0, seq_length=1):
