@@ -71,6 +71,8 @@ import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.file_utils as FileUtils
 from robomimic.envs.env_base import EnvBase, EnvType
 
+from neural_mp.envs.franka_pybullet_env import depth_to_rgb
+
 
 # Define default cameras to use for each env type
 DEFAULT_CAMERAS = {
@@ -196,8 +198,13 @@ def playback_trajectory_with_obs(
                     frames.append(frame)
                 frame = np.concatenate(frames, axis=1)
             else:
-                # concatenate image obs together
-                im = [traj_grp["obs/{}".format(k)][i] for k in image_names]
+                im = []
+                for k in image_names:
+                    frame = traj_grp["obs/{}".format(k)][i]
+                    if k.endswith('depth'):
+                        import cv2
+                        frame = depth_to_rgb(frame)
+                    im.append(frame)
                 frame = np.concatenate(im, axis=1)
             video_writer.append_data(frame)
         video_count += 1
