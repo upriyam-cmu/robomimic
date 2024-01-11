@@ -38,7 +38,7 @@
     "train": {
         "data": "/home/mdalal/research/neural_mp/neural_mp/datasets/robomimic_trajs_2000_imsize_84.hdf5",
         "output_dir": "logs/mp/trained_models",
-        "num_data_workers": 24,
+        "num_data_workers": 16,
         "hdf5_cache_mode": "low_dim",
         "hdf5_use_swmr": true,
         "hdf5_load_next_obs": false,
@@ -56,7 +56,7 @@
         ],
         "goal_mode": null,
         "cuda": true,
-        "batch_size": 256,
+        "batch_size": 16,
         "num_epochs": 10000,
         "seed": 1
     },
@@ -165,7 +165,10 @@
                     "goal_angles"
                 ],
                 "rgb": [],
-                "depth": ["front_depth"],
+                "depth": [
+                    "front_depth", 
+                    "wrist_depth"
+                ],
                 "scan": []
             },
             "goal": {
