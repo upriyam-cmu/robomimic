@@ -199,12 +199,12 @@ def playback_trajectory_with_obs(
                 frame = np.concatenate(frames, axis=1)
             else:
                 im = []
-                for k in image_names:
-                    frame = traj_grp["obs/{}".format(k)][i]
-                    if k.endswith('depth'):
-                        import cv2
-                        frame = depth_to_rgb(frame)
-                    im.append(frame)
+                for k in traj_grp["obs"].keys():
+                    if k.endswith("image") or k.endswith("depth"):
+                        frame = traj_grp["obs/{}".format(k)][i]
+                        if k.endswith("depth"):
+                            frame = depth_to_rgb(frame)
+                        im.append(frame)
                 frame = np.concatenate(im, axis=1)
             video_writer.append_data(frame)
         video_count += 1

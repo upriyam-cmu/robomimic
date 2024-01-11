@@ -106,6 +106,8 @@ class VisualCore(EncoderCore, BaseNets.ConvBase):
         self.backbone = eval(backbone_class)(**backbone_kwargs)
 
         assert isinstance(self.backbone, BaseNets.ConvBase)
+        
+        self.backbone = torch.compile(self.backbone)
 
         feat_shape = self.backbone.output_shape(input_shape)
         net_list = [self.backbone]
