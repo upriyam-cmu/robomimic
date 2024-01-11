@@ -165,7 +165,10 @@
                     "goal_angles"
                 ],
                 "rgb": [],
-                "depth": ["front_depth", "wrist_depth"],
+                "depth": [
+                    "front_depth", 
+                    "wrist_depth"
+                ],
                 "scan": []
             },
             "goal": {
