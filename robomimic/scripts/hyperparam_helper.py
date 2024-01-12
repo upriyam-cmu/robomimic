@@ -57,7 +57,7 @@ def make_generator(config_file, script_file):
         name="",
         group=0,
         values=[
-            "/home/sbahl2/research/neural_mp/neural_mp/datasets/table_simple_2K_pcd_params_obs_delta_true.hdf5"
+            "/home/sbahl2/research/neural_mp/neural_mp/datasets/table_100K_pcd_params_obs_delta_true.hdf5"
         ],
     )
 
@@ -99,6 +99,21 @@ def make_generator(config_file, script_file):
     #         1000,
     #     ], 
     # )
+
+    generator.add_param(
+        key="observation.modalities.obs.low_dim",
+        name="low_dim",
+        group=1,
+        values=[[], ['current_angles'], ['goal_angles'], ['current_angles', 'goal_angles']],
+        value_names=['n', 'q', 'g', 'qg'],
+    )
+
+    generator.add_param(
+        key="experiment.pcd_params.target_pcd_type",
+        name="tpt",
+        group=2,
+        values=['joint', 'ee'],
+    )
 
     return generator
 

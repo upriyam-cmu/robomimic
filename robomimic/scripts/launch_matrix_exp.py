@@ -41,13 +41,12 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
 
 
 slurm_additional_parameters = {
-    "partition": "deepaklong",
+    "partition": "deepaklong,abhinavlong",
     "time": "2-00:00:00",
     "gpus": 1,
     "cpus_per_gpu": 16,
     "mem": "100g",
-    #"exclude": "matrix-1-[4,8,10,12,16],matrix-0-[24,38]",
-    "nodelist": "grogu-1-3"
+    "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", 
 }
 
 
@@ -101,11 +100,9 @@ def run_on_slurm(config_path, sif_path):
     output_dir = get_exp_dir(config)
 
     # Generate the command
-    python_cmd = subprocess.check_output("which python", shell=True).decode("utf-8")[
-        :-1
-    ]
+    python_cmd = subprocess.check_output("which python", shell=True).decode("utf-8")[:-1]
     executor = submitit.AutoExecutor(
-        folder=output_dir + "/%j",
+        folder=os.path.join(output_dir, "%j"),
     )
     executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters)
     # absolute path to robomimic/scripts/train.py
