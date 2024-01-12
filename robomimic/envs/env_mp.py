@@ -32,7 +32,7 @@ from pytorch3d.renderer import (
     NormWeightedCompositor
 )
 
-from neural_mp.envs.franka_pybullet_env import depth_to_rgb
+from neural_mp.envs.franka_pybullet_env import depth_to_rgb, compute_full_pcd
 
 
 class EnvMP(EB.EnvBase):
@@ -154,6 +154,12 @@ class EnvMP(EB.EnvBase):
             if k.endswith('depth'):
                 ob_return[k] = depth_to_rgb(ob_return[k])
                 ob_return[k] = ob_return[k].transpose(2, 0, 1)
+            if 'pcd' in k:
+                ob_return[k] = compute_full_pcd(
+                    pcd_params=np.expand_dims(ob_return[k], axis=0),
+                    num_robot_points=2048,
+                    num_obstacle_points=4096,
+                )[0]
         return ob_return
 
     def get_state(self):

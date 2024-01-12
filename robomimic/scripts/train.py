@@ -147,6 +147,9 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
 
     print("\n============= Model Summary =============")
     print(model)  # print model summary
+    print("Policy params: %e" % sum(p.numel() for p in model.nets['policy'].parameters()))
+    print("encoder params: %e" % sum(p.numel() for p in model.nets['policy'].nets['encoder'].parameters()))
+
     print("")
 
     # load training data

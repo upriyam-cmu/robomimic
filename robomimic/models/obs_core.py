@@ -249,16 +249,6 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         """
         Forward pass through visual core.
         """
-        batch_size = inputs.shape[0]
-        if len(inputs.shape) == 2:
-            # for the env, we need to convert to pcd
-            pcd_params = inputs # (batch_size, -1)
-            pcds = []
-            for idx in range(batch_size):
-                pcd = compute_full_pcd(pcd_params[idx:idx+1].cpu().numpy(), 2048, 4096)[0]
-                pcds.append(pcd)
-            pcds = np.stack(pcds, axis=0)
-            inputs = torch.from_numpy(pcds).float().to(inputs.device)
         out = super(PcdCore, self).forward(inputs)
         return out
 
