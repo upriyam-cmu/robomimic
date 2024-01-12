@@ -42,7 +42,7 @@ from robomimic.algo import algo_factory, RolloutPolicy
 from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
 
 
-def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
+def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False):
     """
     Train a model using the algorithm.
     """
@@ -56,7 +56,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
     print("\n============= New Training Run with Config =============")
     print(config)
     print("")
-    if ckpt_dict:
+    if ckpt_dict and not start_from_checkpoint:
         log_dir, ckpt_dir, video_dir = ckpt_dict["log_dir"], ckpt_dict["ckpt_dir"], ckpt_dict["video_dir"]
         epoch = ckpt_dict["epoch"]
     elif output_dir is not None and output_dir != 'None':
@@ -475,7 +475,7 @@ def main(args):
     res_str = "finished run successfully!"
 
     try:
-        train(config, device=device, ckpt_path=ckpt_path, ckpt_dict=ckpt_dict, output_dir=args.output_dir)
+        train(config, device=device, ckpt_path=ckpt_path, ckpt_dict=ckpt_dict, output_dir=args.output_dir, start_from_checkpoint=args.start_from_checkpoint)
     except Exception as e:
         res_str = "run failed with error:\n{}\n\n{}".format(e, traceback.format_exc())
     print(res_str)
@@ -537,6 +537,13 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="(optional) if provided, override the output directory defined in the config",
+    )
+
+    parser.add_argument(
+        "--start_from_checkpoint",
+        type=bool,
+        default=False,
+        help="set this flag to start from a checkpoint (instead of resuming - just loads the model weights)"
     )
     args = parser.parse_args()
     main(args)

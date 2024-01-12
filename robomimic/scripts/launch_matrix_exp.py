@@ -59,7 +59,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         self.config_path = config_path
         self.p = None
 
-    def __call__(self, checkpoint_path=None):
+    def __call__(self, checkpoint_path=None, start_from_checkpoint=False):
         """
         """
         # launch function in a singularity container:
@@ -68,7 +68,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         if checkpoint_path is not None:
             output_dir = None # get output_dir from ckpt
         cmd = f"{singularity_path} exec --nv {self.sif_path} {self.python_path} {self.file_path} --config {self.config_path} \
-            --output_dir {output_dir} --agent {checkpoint_path}"
+            --output_dir {output_dir} --agent {checkpoint_path} --start_from_checkpoint {start_from_checkpoint}"
         self.p = subprocess.Popen(cmd, shell=True)
         while True:
             pass
@@ -90,7 +90,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         return submitit.helpers.DelayedSubmission(wrapped_callable, checkpoint_path)
 
 
-def run_on_slurm(config_path, sif_path):
+def run_on_slurm(config_path, sif_path, checkpoint_path=None):
     ext_cfg = json.load(open(config_path, "r"))
     config = config_factory(ext_cfg["algo_name"])
     # update config with external json - this will throw errors if
@@ -110,7 +110,8 @@ def run_on_slurm(config_path, sif_path):
     wrapped_callable = WrappedCallable(
         output_dir, sif_path, python_cmd, file_path, config_path
     )
-    job = executor.submit(wrapped_callable, None)
+    # basically if we take in a checkpoint path, we want to start from that checkpoint
+    job = executor.submit(wrapped_callable, checkpoint_path, True if checkpoint_path is not None else False)
 
 
 if __name__ == "__main__":

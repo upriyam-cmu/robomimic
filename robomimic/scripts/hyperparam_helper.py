@@ -130,7 +130,7 @@ def main(args):
     # generate jsons and script
     import neural_mp
     sif_path = os.path.join(neural_mp.__file__[:-len("neural_mp/__init__.py")], "containers/neural_mp_bash.sif")
-    generator.generate_matrix_commands(sif_path)
+    generator.generate_matrix_commands(sif_path, args.checkpoint_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -153,6 +153,13 @@ if __name__ == "__main__":
         "--script",
         type=str,
         help="path to output script that contains commands to run the generated training runs",
+    )
+
+    parser.add_argument(
+        "--checkpoint_path",
+        type=str,
+        default=None,
+        help="path to checkpoint to start from",
     )
 
     args = parser.parse_args()
