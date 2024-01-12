@@ -33,6 +33,11 @@
             "rate": 50,
             "warmstart": 0,
             "terminate_on_success": true
+        },
+        "pcd_params": {
+            "num_robot_points": 2048,
+            "num_obstacle_points": 4096,
+            "target_pcd_type": "ee"
         }
     },
     "train": {

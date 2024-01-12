@@ -44,6 +44,7 @@ class EnvMP(EB.EnvBase):
         render_offscreen=False, 
         use_image_obs=False, 
         postprocess_visual_obs=True, 
+        pcd_params=None,
         **kwargs,
     ):
         """
@@ -70,6 +71,7 @@ class EnvMP(EB.EnvBase):
         self._current_reward = None
         self._current_done = None
         self._done = None
+        self.pcd_params = pcd_params
         self.env = eval(env_name)(cfg)
 
     def step(self, action):
@@ -157,8 +159,7 @@ class EnvMP(EB.EnvBase):
             if 'pcd' in k:
                 ob_return[k] = compute_full_pcd(
                     pcd_params=np.expand_dims(ob_return[k], axis=0),
-                    num_robot_points=2048,
-                    num_obstacle_points=4096,
+                    **self.pcd_params
                 )[0]
         return ob_return
 

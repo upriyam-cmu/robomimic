@@ -146,6 +146,7 @@ def create_env(
     render=False, 
     render_offscreen=False, 
     use_image_obs=False, 
+    pcd_params=None,
     **kwargs,
 ):
     """
@@ -175,6 +176,7 @@ def create_env(
         render_offscreen=render_offscreen, 
         use_image_obs=use_image_obs,
         postprocess_visual_obs=True,
+        pcd_params=pcd_params,
         **kwargs,
     )
     print("Created environment with name {}".format(env_name))
@@ -188,6 +190,7 @@ def create_env_from_metadata(
     render=False, 
     render_offscreen=False, 
     use_image_obs=False, 
+    pcd_params=None
 ):
     """
     Create environment.
@@ -224,6 +227,7 @@ def create_env_from_metadata(
         render=render, 
         render_offscreen=render_offscreen, 
         use_image_obs=use_image_obs, 
+        pcd_params=pcd_params,
         **env_kwargs,
     )
     check_env_version(env, env_meta)

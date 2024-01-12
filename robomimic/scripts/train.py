@@ -114,7 +114,8 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
                 env_name=env_name, 
                 render=False, 
                 render_offscreen=config.experiment.render_video,
-                use_image_obs=shape_meta["use_images"], 
+                use_image_obs=shape_meta["use_images"],
+                pcd_params=config.experiment.pcd_params,
             )
             env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
             envs[env.name] = env

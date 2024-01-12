@@ -122,6 +122,10 @@ class BaseConfig(Config):
         self.experiment.rollout.warmstart = 0                       # number of epochs to wait before starting rollouts
         self.experiment.rollout.terminate_on_success = True         # end rollout early after task success
 
+        self.experiment.pcd_params.num_robot_points = 2048
+        self.experiment.pcd_params.num_obstacle_points = 4096
+        self.experiment.pcd_params.target_pcd_type = 'joint'
+
     def train_config(self):
         """
         This function populates the `config.train` attribute of the config, which 

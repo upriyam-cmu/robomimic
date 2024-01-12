@@ -36,6 +36,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         hdf5_normalize_obs=False,
         filter_by_attribute=None,
         load_next_obs=True,
+        pcd_params=None,
     ):
         """
         Dataset class for fetching sequences of experience.
@@ -156,6 +157,7 @@ class SequenceDataset(torch.utils.data.Dataset):
             self.hdf5_cache = None
         self.close_and_delete_hdf5_handle()
         self.ep_to_hdf5_file = None
+        self.pcd_params = pcd_params
 
     def load_demo_info(self, filter_by_attribute=None, demos=None):
         """
@@ -546,8 +548,7 @@ class SequenceDataset(torch.utils.data.Dataset):
             if 'pcd' in k:
                 obs[k] = compute_full_pcd(
                 pcd_params=obs[k],
-                num_robot_points=2048,
-                num_obstacle_points=4096,
+                **self.pcd_params
             )
             if 'depth' in k:
                 new_obs = []
