@@ -242,6 +242,8 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
             return [7]
         elif self.backbone.nets.size == 'small':
             return [1024]
+        elif self.backbone.nets.size == 'medium':
+            return [1536]
         elif self.backbone.nets.size == 'large':
             return [2048]
 

@@ -934,6 +934,8 @@ class PointNetEncoder(Module):
             return [7]
         elif self.nets.size == 'small':
             return [1024]
+        elif self.nets.size == 'medium':
+            return [1536]
         elif self.nets.size == 'large':
             return [2048]
 

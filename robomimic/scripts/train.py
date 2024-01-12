@@ -148,8 +148,20 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None):
 
     print("\n============= Model Summary =============")
     print(model)  # print model summary
-    print("Policy params: %e" % sum(p.numel() for p in model.nets['policy'].parameters()))
-    print("encoder params: %e" % sum(p.numel() for p in model.nets['policy'].nets['encoder'].parameters()))
+    def format_parameters(num):
+        if num < 1e6:
+            return f"{num / 1e3:.2f}K"  # Thousands
+        elif num < 1e9:
+            return f"{num / 1e6:.2f}M"  # Millions
+        elif num < 1e12:
+            return f"{num / 1e9:.2f}G"  # Billions
+        else:
+            return f"{num / 1e12:.2f}T"  # Trillions
+
+    num_policy_params =sum(p.numel() for p in model.nets['policy'].parameters())
+    num_enc_params = sum(p.numel() for p in model.nets['policy'].nets['encoder'].parameters())
+    print("Policy params: ", format_parameters(num_policy_params))
+    print("encoder params: ", format_parameters(num_enc_params))
 
     print("")
 

@@ -76,6 +76,36 @@ class MPiNetsPointNet(pl.LightningModule):
                 nn.LeakyReLU(inplace=True),
                 nn.Linear(1024, 1024),
             )
+        elif self.size == 'medium':
+            self.SA_modules.append(
+                PointnetSAModule(
+                    npoint=512,
+                    radius=0.05,
+                    nsample=128,
+                    mlp=[1, 64, 64, 64],
+                    bn=False,
+                )
+            )
+            self.SA_modules.append(
+                PointnetSAModule(
+                    npoint=128,
+                    radius=0.3,
+                    nsample=128,
+                    mlp=[64, 128, 128, 256],
+                    bn=False,
+                )
+            )
+            self.SA_modules.append(PointnetSAModule(nsample=128, mlp=[256, 512, 1024], bn=False))
+
+            self.fc_layer = nn.Sequential(
+                nn.Linear(1024, 2048),
+                nn.GroupNorm(16, 2048),
+                nn.LeakyReLU(inplace=True),
+                nn.Linear(2048, 1536),
+                nn.GroupNorm(16, 1536),
+                nn.LeakyReLU(inplace=True),
+                nn.Linear(1536, 1536),
+            )
         else:
             self.SA_modules.append(
                 PointnetSAModule(
