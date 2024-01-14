@@ -313,7 +313,12 @@ class Algo(object):
         """
         Get dictionary of current model parameters.
         """
-        return self.nets.state_dict()
+        checkpoint = { 
+            'model': self.nets.state_dict(),
+            'optimizer': {k: opt.state_dict() for k,opt in self.optimizers.items()},
+            'lr_sched': {k: sched.state_dict() for k, sched in self.lr_schedulers.items() if sched is not None},
+        }
+        return checkpoint
 
     def deserialize(self, model_dict):
         """
@@ -323,7 +328,11 @@ class Algo(object):
             model_dict (dict): a dictionary saved by self.serialize() that contains
                 the same keys as @self.network_classes
         """
-        self.nets.load_state_dict(model_dict)
+        self.nets.load_state_dict(model_dict['model'])
+        for k in self.optimizers:
+            self.optimizers[k].load_state_dict(model_dict['optimizer'][k])
+            if k in self.lr_schedulers and self.lr_schedulers[k] is not None:
+                self.lr_schedulers[k].load_state_dict(model_dict['lr_sched'][k])
 
     def __repr__(self):
         """

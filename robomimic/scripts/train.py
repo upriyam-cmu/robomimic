@@ -68,7 +68,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         os.makedirs(video_dir, exist_ok=True)
         epoch = 1
     else:
-        log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config)
+        log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config, auto_remove_exp_dir=start_from_checkpoint)
         epoch = 1
 
     if config.experiment.logging.terminal_output_to_txt:
