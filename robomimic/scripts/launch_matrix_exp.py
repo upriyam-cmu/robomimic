@@ -51,15 +51,16 @@ slurm_additional_parameters = {
 
 
 class WrappedCallable(submitit.helpers.Checkpointable):
-    def __init__(self, output_dir, sif_path, python_path, file_path, config_path):
+    def __init__(self, output_dir, sif_path, python_path, file_path, config_path, start_from_checkpoint):
         self.output_dir = output_dir
         self.sif_path = sif_path
         self.python_path = python_path
         self.file_path = file_path
         self.config_path = config_path
         self.p = None
+        self.start_from_checkpoint = start_from_checkpoint
 
-    def __call__(self, checkpoint_path=None, start_from_checkpoint=False):
+    def __call__(self, checkpoint_path=None):
         """
         """
         # launch function in a singularity container:
@@ -68,7 +69,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         if checkpoint_path is not None:
             output_dir = None # get output_dir from ckpt
         cmd = f"{singularity_path} exec --nv {self.sif_path} {self.python_path} {self.file_path} --config {self.config_path} \
-            --output_dir {output_dir} --agent {checkpoint_path} --start_from_checkpoint {start_from_checkpoint}"
+            --output_dir {output_dir} --agent {checkpoint_path} --start_from_checkpoint {self.start_from_checkpoint}"
         self.p = subprocess.Popen(cmd, shell=True)
         while True:
             pass
@@ -82,7 +83,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         time.sleep(30)
         print("setup new callable")
         wrapped_callable = WrappedCallable(
-            self.output_dir, self.sif_path, self.python_path, self.file_path, self.config_path
+            self.output_dir, self.sif_path, self.python_path, self.file_path, self.config_path, start_from_checkpoint=False
         )
         ckpt_dir = os.path.join(self.output_dir, "models")
         checkpoint_path = os.path.join(ckpt_dir, "model_latest.pth")
@@ -108,10 +109,10 @@ def run_on_slurm(config_path, sif_path, checkpoint_path=None):
     # absolute path to robomimic/scripts/train.py
     file_path = os.path.join(robomimic.__path__[0], "scripts/train.py")
     wrapped_callable = WrappedCallable(
-        output_dir, sif_path, python_cmd, file_path, config_path
+        output_dir, sif_path, python_cmd, file_path, config_path, start_from_checkpoint=True if checkpoint_path is not None else False
     )
     # basically if we take in a checkpoint path, we want to start from that checkpoint
-    job = executor.submit(wrapped_callable, checkpoint_path, True if checkpoint_path is not None else False)
+    job = executor.submit(wrapped_callable, checkpoint_path)
 
 
 if __name__ == "__main__":
