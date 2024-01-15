@@ -113,7 +113,8 @@ def make_generator(config_file, script_file):
         key="experiment.pcd_params.target_pcd_type",
         name="tpt",
         group=2,
-        values=['j', 'ee'],
+        values=['joint', 'ee'],
+        value_names=['j', 'e'],
     )
 
     return generator
