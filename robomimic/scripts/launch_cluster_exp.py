@@ -119,6 +119,8 @@ def run_on_slurm(config_path, sif_path, checkpoint_path=None):
         folder=os.path.join(output_dir, "%j"),
         slurm_max_num_timeout=1000,
     )
+    job_name = config.experiment.name
+    slurm_additional_parameters["job_name"] = job_name
     executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters)
     # absolute path to robomimic/scripts/train.py
     file_path = os.path.join(robomimic.__path__[0], "scripts/train.py")

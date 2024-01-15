@@ -103,7 +103,7 @@ def make_generator(config_file, script_file):
 
     generator.add_param(
         key="observation.modalities.obs.low_dim",
-        name="low_dim",
+        name="ld",
         group=1,
         values=[[], ['current_angles'], ['goal_angles'], ['current_angles', 'goal_angles']],
         value_names=['n', 'q', 'g', 'qg'],
@@ -113,7 +113,7 @@ def make_generator(config_file, script_file):
         key="experiment.pcd_params.target_pcd_type",
         name="tpt",
         group=2,
-        values=['joint', 'ee'],
+        values=['j', 'ee'],
     )
 
     return generator

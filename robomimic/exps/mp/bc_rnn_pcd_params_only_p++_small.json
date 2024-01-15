@@ -216,7 +216,7 @@
                 "core_kwargs": {
                     "backbone_class": "PointNetEncoder",
                     "backbone_kwargs": {
-                        "encoder_size":"large"
+                        "encoder_size":"small"
                     }
                 },
                 "obs_randomizer_class": null,
