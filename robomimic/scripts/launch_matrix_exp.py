@@ -41,12 +41,13 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
 
 
 slurm_additional_parameters = {
-    "partition": "deepaklong,abhinavlong",
-    "time": "2-00:00:00",
+    "partition": "all",
+    "time": "00:07:00",
     "gpus": 1,
     "cpus_per_gpu": 16,
     "mem": "100g",
-    "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", 
+    # "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
+    "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
 }
 
 
@@ -69,7 +70,10 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         if checkpoint_path is not None:
             output_dir = None # get output_dir from ckpt
         cmd = f"{singularity_path} exec --nv {self.sif_path} {self.python_path} {self.file_path} --config {self.config_path} \
-            --output_dir {output_dir} --agent {checkpoint_path} --start_from_checkpoint {self.start_from_checkpoint}"
+            --output_dir {output_dir} --agent {checkpoint_path}"
+        if self.start_from_checkpoint:
+            cmd += " --start_from_checkpoint"
+        print(cmd)
         self.p = subprocess.Popen(cmd, shell=True)
         while True:
             pass
@@ -104,12 +108,14 @@ def run_on_slurm(config_path, sif_path, checkpoint_path=None):
     python_cmd = subprocess.check_output("which python", shell=True).decode("utf-8")[:-1]
     executor = submitit.AutoExecutor(
         folder=os.path.join(output_dir, "%j"),
+        slurm_max_num_timeout=1000,
     )
     executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters)
     # absolute path to robomimic/scripts/train.py
     file_path = os.path.join(robomimic.__path__[0], "scripts/train.py")
+    start_from_checkpoint = True if checkpoint_path is not None else False
     wrapped_callable = WrappedCallable(
-        output_dir, sif_path, python_cmd, file_path, config_path, start_from_checkpoint=True if checkpoint_path is not None else False
+        output_dir, sif_path, python_cmd, file_path, config_path, start_from_checkpoint
     )
     # basically if we take in a checkpoint path, we want to start from that checkpoint
     job = executor.submit(wrapped_callable, checkpoint_path)

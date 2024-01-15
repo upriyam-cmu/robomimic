@@ -57,9 +57,11 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     print(config)
     print("")
     if ckpt_dict and not start_from_checkpoint:
+        print("loading dirs from checkpoint")
         log_dir, ckpt_dir, video_dir = ckpt_dict["log_dir"], ckpt_dict["ckpt_dir"], ckpt_dict["video_dir"]
         epoch = ckpt_dict["epoch"]
     elif output_dir is not None and output_dir != 'None':
+        print("getting dirs from output_dir")
         log_dir = os.path.join(output_dir, "logs")
         ckpt_dir = os.path.join(output_dir, "models")
         video_dir = os.path.join(output_dir, "videos")
@@ -68,6 +70,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         os.makedirs(video_dir, exist_ok=True)
         epoch = 1
     else:
+        print("getting dirs from config")
         log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config, auto_remove_exp_dir=start_from_checkpoint)
         epoch = 1
 
@@ -228,6 +231,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
 
     def handler(signum, frame):
         print('Signal handler called with signal', signum)
+        print("Saving checkpoint before exiting...")
         TrainUtils.save_model(
             model=model,
             config=config,
@@ -251,19 +255,6 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             epoch=epoch,
             num_steps=train_num_steps,
             obs_normalization_stats=obs_normalization_stats,
-        )
-        # checkpoint every epoch (1K steps)
-        TrainUtils.save_model(
-            model=model,
-            config=config,
-            env_meta=env_meta,
-            shape_meta=shape_meta,
-            ckpt_path=os.path.join(ckpt_dir, "model_latest.pth"),
-            obs_normalization_stats=obs_normalization_stats,
-            log_dir=log_dir,
-            ckpt_dir=ckpt_dir,
-            video_dir=video_dir,
-            epoch=epoch,
         )
         model.on_epoch_end(epoch)
 
@@ -541,9 +532,8 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--start_from_checkpoint",
-        type=bool,
-        default=False,
-        help="set this flag to start from a checkpoint (instead of resuming - just loads the model weights)"
+        action='store_true',
+        help="set this flag to start from checkpoint (not resume)",
     )
     args = parser.parse_args()
     main(args)
