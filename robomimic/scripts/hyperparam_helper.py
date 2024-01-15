@@ -54,20 +54,38 @@ def make_generator(config_file, script_file):
 
     generator.add_param(
         key="train.data",
-        name="",
+        name="ds",
         group=0,
         values=[
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_true.hdf5"
-            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_true.hdf5",
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
         ],
+        value_names=[
+            "table_simple_100K_pcd_params_obs_delta_true",
+            "table_1M_pcd_params_obs_delta_true"
+        ]
     )
 
-    #generator.add_param(
-    #    key="train.batch_size",
-    #    name="bs", 
-    #    group=1, 
-    #    values=[8, 16, 32],
-    #)
+    generator.add_param(
+       key="train.batch_size",
+       name="bs", 
+       group=1, 
+       values=[32],
+    )
+
+    generator.add_param(
+       key="algo.optim_params.policy.learning_rate.initial", 
+       name="plr", 
+       group=2, 
+       values=[1e-4, 2e-4, 5e-4, 1e-3], 
+    )
+
+    generator.add_param(
+        key="observation.encoder.pcd.core_kwargs.backbone_kwargs.encoder_size", 
+        name="size", 
+        group=3, 
+        values=['medium', 'large'], 
+    )
 
     #generator.add_param(
     #    key="train.seq_length", 
@@ -101,21 +119,21 @@ def make_generator(config_file, script_file):
     #     ], 
     # )
 
-    generator.add_param(
-        key="observation.modalities.obs.low_dim",
-        name="ld",
-        group=1,
-        values=[[], ['current_angles'], ['goal_angles'], ['current_angles', 'goal_angles']],
-        value_names=['n', 'q', 'g', 'qg'],
-    )
+    # generator.add_param(
+    #     key="observation.modalities.obs.low_dim",
+    #     name="ld",
+    #     group=1,
+    #     values=[[], ['current_angles'], ['goal_angles'], ['current_angles', 'goal_angles']],
+    #     value_names=['n', 'q', 'g', 'qg'],
+    # )
 
-    generator.add_param(
-        key="experiment.pcd_params.target_pcd_type",
-        name="tpt",
-        group=2,
-        values=['joint', 'ee'],
-        value_names=['j', 'e'],
-    )
+    # generator.add_param(
+    #     key="experiment.pcd_params.target_pcd_type",
+    #     name="tpt",
+    #     group=2,
+    #     values=['joint', 'ee'],
+    #     value_names=['j', 'e'],
+    # )
 
     return generator
 

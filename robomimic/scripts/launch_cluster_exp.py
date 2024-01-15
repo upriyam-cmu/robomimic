@@ -54,7 +54,7 @@ slurm_additional_parameters = {
     "partition": "russ_reserved",
     "time": "3-00:00:00",
     "gpus": 1,
-    "cpus_per_gpu": 16,
+    "cpus_per_gpu": 20,
     "mem": "62g",
     "exclude": "matrix-1-[4,6,8,10,12,16,18,20],matrix-0-[24,34,38]", # Throw out non-rtx
 }
