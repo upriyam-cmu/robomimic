@@ -10,7 +10,7 @@ import itertools
 from collections import OrderedDict
 from copy import deepcopy
 
-from robomimic.scripts.launch_matrix_exp import run_on_slurm
+from robomimic.scripts.launch_cluster_exp import run_on_slurm
 
 
 class ConfigGenerator(object):
