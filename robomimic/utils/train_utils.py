@@ -146,7 +146,6 @@ def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=Non
     """
     if dataset_path is None:
         dataset_path = config.train.data
-
     ds_kwargs = dict(
         hdf5_path=dataset_path,
         obs_keys=obs_keys,
@@ -162,7 +161,7 @@ def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=Non
         hdf5_use_swmr=config.train.hdf5_use_swmr,
         hdf5_normalize_obs=config.train.hdf5_normalize_obs,
         filter_by_attribute=filter_by_attribute,
-        pcd_params=config.experiment.pcd_params,
+        pcd_params=config.experiment.pcd_params.to_dict(),
     )
     dataset = SequenceDataset(**ds_kwargs)
 
@@ -539,7 +538,6 @@ def run_epoch(model, data_loader, epoch, validate=False, num_steps=None, obs_nor
     step_log_all = []
     timing_stats = dict(Data_Loading=[], Process_Batch=[], Train_Batch=[], Log_Info=[])
     start_time = time.time()
-
     data_loader_iter = iter(data_loader)
     for _ in LogUtils.custom_tqdm(range(num_steps)):
 

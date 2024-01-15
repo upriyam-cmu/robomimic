@@ -159,7 +159,7 @@ class BC(PolicyAlgo):
             predictions (dict): dictionary containing network outputs
         """
         predictions = OrderedDict()
-        actions = self.nets["policy"](obs_dict=batch["obs"], goal_dict=batch["goal_obs"])
+        actions = self.nets["policy"]('forward', obs_dict=batch["obs"], goal_dict=batch["goal_obs"])
         predictions["actions"] = actions
         return predictions
 
@@ -247,7 +247,7 @@ class BC(PolicyAlgo):
             action (torch.Tensor): action tensor
         """
         assert not self.nets.training
-        return self.nets["policy"](obs_dict, goal_dict=goal_dict)
+        return self.nets["policy"]('forward', obs_dict, goal_dict=goal_dict)
 
 
 class BC_Gaussian(BC):
@@ -288,7 +288,7 @@ class BC_Gaussian(BC):
         Returns:
             predictions (dict): dictionary containing network outputs
         """
-        dists = self.nets["policy"].forward_train(
+        dists = self.nets['policy']('train', 
             obs_dict=batch["obs"], 
             goal_dict=batch["goal_obs"],
         )
@@ -418,7 +418,7 @@ class BC_VAE(BC):
             freeze_encoder=batch.get("freeze_encoder", False),
         )
 
-        vae_outputs = self.nets["policy"].forward_train(**vae_inputs)
+        vae_outputs = self.nets['policy']('train', **vae_inputs)
         predictions = OrderedDict(
             actions=vae_outputs["decoder_outputs"],
             kl_loss=vae_outputs["kl_loss"],
@@ -549,7 +549,7 @@ class BC_RNN(BC):
 
         if self._rnn_hidden_state is None or self._rnn_counter % self._rnn_horizon == 0:
             batch_size = list(obs_dict.values())[0].shape[0]
-            self._rnn_hidden_state = self.nets["policy"].get_rnn_init_state(batch_size=batch_size, device=self.device)
+            self._rnn_hidden_state = self.nets["policy"]('get_rnn_init_state', batch_size=batch_size, device=self.device)
 
             if self._rnn_is_open_loop:
                 # remember the initial observation, and use it instead of the current observation
@@ -562,7 +562,7 @@ class BC_RNN(BC):
             obs_to_use = self._open_loop_obs
 
         self._rnn_counter += 1
-        action, self._rnn_hidden_state = self.nets["policy"].forward_step(
+        action, self._rnn_hidden_state = self.nets['policy']('step', 
             obs_to_use, goal_dict=goal_dict, rnn_state=self._rnn_hidden_state)
         return action
 
@@ -618,7 +618,7 @@ class BC_RNN_GMM(BC_RNN):
         Returns:
             predictions (dict): dictionary containing network outputs
         """
-        dists = self.nets["policy"].forward_train(
+        dists = self.nets['policy']('train', 
             obs_dict=batch["obs"], 
             goal_dict=batch["goal_obs"],
         )
@@ -780,7 +780,7 @@ class BC_Transformer(BC):
         """
         assert not self.nets.training
 
-        return self.nets["policy"](obs_dict, actions=None, goal_dict=goal_dict)[:, -1, :]
+        return self.nets["policy"]('forward', obs_dict, actions=None, goal_dict=goal_dict)[:, -1, :]
 
 
 class BC_Transformer_GMM(BC_Transformer):
@@ -821,7 +821,7 @@ class BC_Transformer_GMM(BC_Transformer):
             msg="Error: expect temporal dimension of obs batch to match transformer context length {}".format(self.context_length),
         )
 
-        dists = self.nets["policy"].forward_train(
+        dists = self.nets['policy']('train', 
             obs_dict=batch["obs"], 
             actions=None,
             goal_dict=batch["goal_obs"],

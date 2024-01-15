@@ -30,6 +30,7 @@ from collections import OrderedDict
 
 import torch
 from torch.utils.data import DataLoader
+from diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace import setup
 
 import robomimic
 import robomimic.utils.train_utils as TrainUtils
@@ -40,9 +41,26 @@ import robomimic.utils.file_utils as FileUtils
 from robomimic.config import config_factory
 from robomimic.algo import algo_factory, RolloutPolicy
 from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
+import torch.multiprocessing as mp
+import torch.distributed as dist
+import torch.nn as nn
 
+class DDPModelWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    
+    def forward(self, forward_type, *args, **kwargs):
+        if forward_type == 'train':
+            return self.model.forward_train(*args, **kwargs)
+        elif forward_type == 'step':
+            return self.model.forward_step(*args, **kwargs)
+        elif forward_type == 'get_rnn_init_state':
+            return self.model.get_rnn_init_state(*args, **kwargs)
+        else:
+            return self.model(*args, **kwargs)
 
-def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False):
+def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False, rank=0, world_size=1, ddp=False):
     """
     Train a model using the algorithm.
     """
@@ -56,23 +74,29 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     print("\n============= New Training Run with Config =============")
     print(config)
     print("")
-    if ckpt_dict and not start_from_checkpoint:
-        print("loading dirs from checkpoint")
-        log_dir, ckpt_dir, video_dir = ckpt_dict["log_dir"], ckpt_dict["ckpt_dir"], ckpt_dict["video_dir"]
-        epoch = ckpt_dict["epoch"]
-    elif output_dir is not None and output_dir != 'None':
-        print("getting dirs from output_dir")
-        log_dir = os.path.join(output_dir, "logs")
-        ckpt_dir = os.path.join(output_dir, "models")
-        video_dir = os.path.join(output_dir, "videos")
-        os.makedirs(log_dir, exist_ok=True)
-        os.makedirs(ckpt_dir, exist_ok=True)
-        os.makedirs(video_dir, exist_ok=True)
-        epoch = 1
+    if rank == 0:
+        if ckpt_dict and not start_from_checkpoint:
+            print("loading dirs from checkpoint")
+            log_dir, ckpt_dir, video_dir = ckpt_dict["log_dir"], ckpt_dict["ckpt_dir"], ckpt_dict["video_dir"]
+            epoch = ckpt_dict["epoch"]
+        elif output_dir is not None and output_dir != 'None':
+            print("getting dirs from output_dir")
+            log_dir = os.path.join(output_dir, "logs")
+            ckpt_dir = os.path.join(output_dir, "models")
+            video_dir = os.path.join(output_dir, "videos")
+            os.makedirs(log_dir, exist_ok=True)
+            os.makedirs(ckpt_dir, exist_ok=True)
+            os.makedirs(video_dir, exist_ok=True)
+            epoch = 1
+        else:
+            print("getting dirs from config")
+            log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config, auto_remove_exp_dir=start_from_checkpoint or ddp)
+            epoch = 1
     else:
-        print("getting dirs from config")
-        log_dir, ckpt_dir, video_dir = TrainUtils.get_exp_dir(config, auto_remove_exp_dir=start_from_checkpoint)
-        epoch = 1
+        if ckpt_dict and not start_from_checkpoint:
+            epoch = ckpt_dict["epoch"]
+        else:
+            epoch = 1
 
     if config.experiment.logging.terminal_output_to_txt:
         # log stdout and stderr to a text file
@@ -101,38 +125,40 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         env_meta["env_name"] = config.experiment.env
         print("=" * 30 + "\n" + "Replacing Env to {}\n".format(env_meta["env_name"]) + "=" * 30)
 
-    # create environment
-    envs = OrderedDict()
-    if config.experiment.rollout.enabled:
-        # create environments for validation runs
-        env_names = [env_meta["env_name"]]
+    if rank == 0:
+        # create environment
+        envs = OrderedDict()
+        if config.experiment.rollout.enabled:
+            # create environments for validation runs
+            env_names = [env_meta["env_name"]]
 
-        if config.experiment.additional_envs is not None:
-            for name in config.experiment.additional_envs:
-                env_names.append(name)
+            if config.experiment.additional_envs is not None:
+                for name in config.experiment.additional_envs:
+                    env_names.append(name)
 
-        for env_name in env_names:
-            env = EnvUtils.create_env_from_metadata(
-                env_meta=env_meta,
-                env_name=env_name, 
-                render=False, 
-                render_offscreen=config.experiment.render_video,
-                use_image_obs=shape_meta["use_images"],
-                pcd_params=config.experiment.pcd_params,
-            )
-            env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
-            envs[env.name] = env
-            print(envs[env.name])
+            for env_name in env_names:
+                env = EnvUtils.create_env_from_metadata(
+                    env_meta=env_meta,
+                    env_name=env_name, 
+                    render=False, 
+                    render_offscreen=config.experiment.render_video,
+                    use_image_obs=shape_meta["use_images"],
+                    pcd_params=config.experiment.pcd_params,
+                )
+                env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
+                envs[env.name] = env
+                print(envs[env.name])
 
     print("")
 
-    # setup for a new training run
-    data_logger = DataLogger(
-        log_dir,
-        config,
-        log_tb=config.experiment.logging.log_tb,
-        log_wandb=config.experiment.logging.log_wandb,
-    )
+    if rank == 0:
+        # setup for a new training run
+        data_logger = DataLogger(
+            log_dir,
+            config,
+            log_tb=config.experiment.logging.log_tb,
+            log_wandb=config.experiment.logging.log_wandb,
+        )
     # restore policy
     if ckpt_path is not None and ckpt_path != 'None':
         model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True)
@@ -145,9 +171,10 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             device=device,
         )
     
-    # save the config as a json file
-    with open(os.path.join(log_dir, '..', 'config.json'), 'w') as outfile:
-        json.dump(config, outfile, indent=4)
+    if rank == 0:
+        # save the config as a json file
+        with open(os.path.join(log_dir, '..', 'config.json'), 'w') as outfile:
+            json.dump(config, outfile, indent=4)
 
     print("\n============= Model Summary =============")
     print(model)  # print model summary
@@ -166,12 +193,22 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     print("Policy params: ", format_parameters(num_policy_params))
     print("encoder params: ", format_parameters(num_enc_params))
 
+    model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
+    setup(rank, world_size)
+    if ddp:
+        model.nets['policy'] = nn.parallel.DistributedDataParallel(model.nets['policy'], device_ids=[rank])
+
     print("")
 
     # load training data
     trainset, validset = TrainUtils.load_data_for_training(
         config, obs_keys=shape_meta["all_obs_keys"])
-    train_sampler = trainset.get_dataset_sampler()
+    if ddp:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(trainset,
+                                                                    num_replicas=world_size,
+                                                                    rank=rank)
+    else:
+        train_sampler = trainset.get_dataset_sampler()
     print("\n============= Training Dataset =============")
     print(trainset)
     print("")
@@ -199,7 +236,12 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     if config.experiment.validate:
         # cap num workers for validation dataset at 1
         num_workers = min(config.train.num_data_workers, 1)
-        valid_sampler = validset.get_dataset_sampler()
+        if ddp:
+            valid_sampler = torch.utils.data.distributed.DistributedSampler(validset,
+                                                                        num_replicas=world_size,
+                                                                        rank=rank)
+        else:
+            valid_sampler = validset.get_dataset_sampler()
         valid_loader = DataLoader(
             dataset=validset,
             sampler=valid_sampler,
@@ -219,11 +261,12 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     print("*" * 50)
     print("")
 
-    # main training loop
-    best_valid_loss = None
-    best_return = {k: -np.inf for k in envs} if config.experiment.rollout.enabled else None
-    best_success_rate = {k: -1. for k in envs} if config.experiment.rollout.enabled else None
-    last_ckpt_time = time.time()
+    if rank == 0:
+        # main training loop
+        best_valid_loss = None
+        best_return = {k: -np.inf for k in envs} if config.experiment.rollout.enabled else None
+        best_success_rate = {k: -1. for k in envs} if config.experiment.rollout.enabled else None
+        last_ckpt_time = time.time()
 
     # number of learning steps per epoch (defaults to a full dataset pass)
     train_num_steps = config.experiment.epoch_every_n_steps
@@ -232,18 +275,19 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     def handler(signum, frame):
         print('Signal handler called with signal', signum)
         print("Saving checkpoint before exiting...")
-        TrainUtils.save_model(
-            model=model,
-            config=config,
-            env_meta=env_meta,
-            shape_meta=shape_meta,
-            ckpt_path=os.path.join(ckpt_dir, "model_latest.pth"),
-            obs_normalization_stats=obs_normalization_stats,
-            log_dir=log_dir,
-            ckpt_dir=ckpt_dir,
-            video_dir=video_dir,
-            epoch=epoch,
-        )
+        if rank == 0:
+            TrainUtils.save_model(
+                model=model,
+                config=config,
+                env_meta=env_meta,
+                shape_meta=shape_meta,
+                ckpt_path=os.path.join(ckpt_dir, "model_latest.pth"),
+                obs_normalization_stats=obs_normalization_stats,
+                log_dir=log_dir,
+                ckpt_dir=ckpt_dir,
+                video_dir=video_dir,
+                epoch=epoch,
+            )
         exit()
     import signal 
     signal.signal(signal.SIGUSR1, handler)
@@ -262,27 +306,36 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         epoch_ckpt_name = "model_epoch_{}".format(epoch)
 
         # check for recurring checkpoint saving conditions
-        should_save_ckpt = False
-        if config.experiment.save.enabled:
-            time_check = (config.experiment.save.every_n_seconds is not None) and \
-                (time.time() - last_ckpt_time > config.experiment.save.every_n_seconds)
-            epoch_check = (config.experiment.save.every_n_epochs is not None) and \
-                (epoch > 0) and (epoch % config.experiment.save.every_n_epochs == 0)
-            epoch_list_check = (epoch in config.experiment.save.epochs)
-            should_save_ckpt = (time_check or epoch_check or epoch_list_check)
-        ckpt_reason = None
-        if should_save_ckpt:
-            last_ckpt_time = time.time()
-            ckpt_reason = "time"
+        if rank == 0:
+            should_save_ckpt = False
+            if config.experiment.save.enabled:
+                time_check = (config.experiment.save.every_n_seconds is not None) and \
+                    (time.time() - last_ckpt_time > config.experiment.save.every_n_seconds)
+                epoch_check = (config.experiment.save.every_n_epochs is not None) and \
+                    (epoch > 0) and (epoch % config.experiment.save.every_n_epochs == 0)
+                epoch_list_check = (epoch in config.experiment.save.epochs)
+                should_save_ckpt = (time_check or epoch_check or epoch_list_check)
+            ckpt_reason = None
+            if should_save_ckpt:
+                last_ckpt_time = time.time()
+                ckpt_reason = "time"
 
-        print("Train Epoch {}".format(epoch))
-        print(json.dumps(step_log, sort_keys=True, indent=4))
-        for k, v in step_log.items():
-            if k.startswith("Time_"):
-                data_logger.record("Timing_Stats/Train_{}".format(k[5:]), v, epoch)
-            else:
-                data_logger.record("Train/{}".format(k), v, epoch)
-
+            print("Train Epoch {}".format(epoch))
+            print(json.dumps(step_log, sort_keys=True, indent=4))
+            for k, v in step_log.items():
+                if k.startswith("Time_"):
+                    data_logger.record("Timing_Stats/Train_{}".format(k[5:]), v, epoch)
+                else:
+                    group = dist.new_group(list(range(world_size)))
+                    tensor = torch.tensor([v])
+                    dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
+                    data_logger.record("Train/{}".format(k), tensor[0].item() / world_size, epoch)
+        else:
+            for k, v in step_log.items():
+                if not k.startswith("Time_"):
+                    group = dist.new_group(list(range(world_size)))
+                    tensor = torch.ones(1)
+                    dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
         # Evaluate the model on validation set
         if config.experiment.validate:
             with torch.no_grad():
@@ -297,111 +350,121 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     model.nets["policy"].low_noise_eval = low_noise_eval
                 except:
                     pass
-            for k, v in step_log.items():
-                if k.startswith("Time_"):
-                    data_logger.record("Timing_Stats/Valid_{}".format(k[5:]), v, epoch)
-                else:
-                    data_logger.record("Valid/{}".format(k), v, epoch)
+            if rank == 0:
+                for k, v in step_log.items():
+                    if k.startswith("Time_"):
+                        data_logger.record("Timing_Stats/Valid_{}".format(k[5:]), v, epoch)
+                    else:
+                        group = dist.new_group(list(range(world_size)))
+                        tensor = torch.tensor([v])
+                        dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
+                        data_logger.record("Valid/{}".format(k), tensor[0].item() / world_size, epoch)
 
-            print("Validation Epoch {}".format(epoch))
-            print(json.dumps(step_log, sort_keys=True, indent=4))
+                print("Validation Epoch {}".format(epoch))
+                print(json.dumps(step_log, sort_keys=True, indent=4))
 
-            # save checkpoint if achieve new best validation loss
-            valid_check = "Loss" in step_log
-            if valid_check and (best_valid_loss is None or (step_log["Loss"] <= best_valid_loss)):
-                best_valid_loss = step_log["Loss"]
-                if config.experiment.save.enabled and config.experiment.save.on_best_validation:
-                    epoch_ckpt_name += "_best_validation_{}".format(best_valid_loss)
-                    should_save_ckpt = True
-                    ckpt_reason = "valid" if ckpt_reason is None else ckpt_reason
-
+                # save checkpoint if achieve new best validation loss
+                valid_check = "Loss" in step_log
+                if valid_check and (best_valid_loss is None or (step_log["Loss"] <= best_valid_loss)):
+                    best_valid_loss = step_log["Loss"]
+                    if config.experiment.save.enabled and config.experiment.save.on_best_validation:
+                        epoch_ckpt_name += "_best_validation_{}".format(best_valid_loss)
+                        should_save_ckpt = True
+                        ckpt_reason = "valid" if ckpt_reason is None else ckpt_reason
+            else:
+                for k, v in step_log.items():
+                    if not k.startswith("Time_"):
+                        group = dist.new_group(list(range(world_size)))
+                        tensor = torch.ones(1)
+                        dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
         # Evaluate the model by by running rollouts
 
         # do rollouts at fixed rate or if it's time to save a new ckpt
-        video_paths = None
-        rollout_check = (epoch % config.experiment.rollout.rate == 0) or (should_save_ckpt and ckpt_reason == "time")
-        if config.experiment.rollout.enabled and (epoch > config.experiment.rollout.warmstart) and rollout_check:
+        if rank == 0:
+            video_paths = None
+            rollout_check = (epoch % config.experiment.rollout.rate == 0) or (should_save_ckpt and ckpt_reason == "time")
+            if config.experiment.rollout.enabled and (epoch > config.experiment.rollout.warmstart) and rollout_check:
 
-            # wrap model as a RolloutPolicy to prepare for rollouts
-            rollout_model = RolloutPolicy(model, obs_normalization_stats=obs_normalization_stats)
+                # wrap model as a RolloutPolicy to prepare for rollouts
+                rollout_model = RolloutPolicy(model, obs_normalization_stats=obs_normalization_stats)
 
-            num_episodes = config.experiment.rollout.n
-            all_rollout_logs, video_paths = TrainUtils.rollout_with_stats(
-                policy=rollout_model,
-                envs=envs,
-                horizon=config.experiment.rollout.horizon,
-                use_goals=config.use_goals,
-                num_episodes=num_episodes,
-                render=False,
-                video_dir=video_dir if config.experiment.render_video else None,
-                epoch=epoch,
-                video_skip=config.experiment.get("video_skip", 5),
-                terminate_on_success=config.experiment.rollout.terminate_on_success,
-            )
+                num_episodes = config.experiment.rollout.n
+                all_rollout_logs, video_paths = TrainUtils.rollout_with_stats(
+                    policy=rollout_model,
+                    envs=envs,
+                    horizon=config.experiment.rollout.horizon,
+                    use_goals=config.use_goals,
+                    num_episodes=num_episodes,
+                    render=False,
+                    video_dir=video_dir if config.experiment.render_video else None,
+                    epoch=epoch,
+                    video_skip=config.experiment.get("video_skip", 5),
+                    terminate_on_success=config.experiment.rollout.terminate_on_success,
+                )
 
-            for k in video_paths.keys():
-                data_logger.record("Video/{}".format(k), video_paths[k], epoch, data_type="video")
-            # summarize results from rollouts to tensorboard and terminal
-            for env_name in all_rollout_logs:
-                rollout_logs = all_rollout_logs[env_name]
-                for k, v in rollout_logs.items():
-                    if k.startswith("Time_"):
-                        data_logger.record("Timing_Stats/Rollout_{}_{}".format(env_name, k[5:]), v, epoch)
-                    else:
-                        data_logger.record("Rollout/{}/{}".format(k, env_name), v, epoch, log_stats=True)
+                for k in video_paths.keys():
+                    data_logger.record("Video/{}".format(k), video_paths[k], epoch, data_type="video")
+                # summarize results from rollouts to tensorboard and terminal
+                for env_name in all_rollout_logs:
+                    rollout_logs = all_rollout_logs[env_name]
+                    for k, v in rollout_logs.items():
+                        if k.startswith("Time_"):
+                            data_logger.record("Timing_Stats/Rollout_{}_{}".format(env_name, k[5:]), v, epoch)
+                        else:
+                            data_logger.record("Rollout/{}/{}".format(k, env_name), v, epoch, log_stats=True)
 
-                print("\nEpoch {} Rollouts took {}s (avg) with results:".format(epoch, rollout_logs["time"]))
-                print('Env: {}'.format(env_name))
-                print(json.dumps(rollout_logs, sort_keys=True, indent=4))
+                    print("\nEpoch {} Rollouts took {}s (avg) with results:".format(epoch, rollout_logs["time"]))
+                    print('Env: {}'.format(env_name))
+                    print(json.dumps(rollout_logs, sort_keys=True, indent=4))
 
-            # checkpoint and video saving logic
-            updated_stats = TrainUtils.should_save_from_rollout_logs(
-                all_rollout_logs=all_rollout_logs,
-                best_return=best_return,
-                best_success_rate=best_success_rate,
-                epoch_ckpt_name=epoch_ckpt_name,
-                save_on_best_rollout_return=config.experiment.save.on_best_rollout_return,
-                save_on_best_rollout_success_rate=config.experiment.save.on_best_rollout_success_rate,
-            )
-            best_return = updated_stats["best_return"]
-            best_success_rate = updated_stats["best_success_rate"]
-            epoch_ckpt_name = updated_stats["epoch_ckpt_name"]
-            should_save_ckpt = (config.experiment.save.enabled and updated_stats["should_save_ckpt"]) or should_save_ckpt
-            if updated_stats["ckpt_reason"] is not None:
-                ckpt_reason = updated_stats["ckpt_reason"]
+                # checkpoint and video saving logic
+                updated_stats = TrainUtils.should_save_from_rollout_logs(
+                    all_rollout_logs=all_rollout_logs,
+                    best_return=best_return,
+                    best_success_rate=best_success_rate,
+                    epoch_ckpt_name=epoch_ckpt_name,
+                    save_on_best_rollout_return=config.experiment.save.on_best_rollout_return,
+                    save_on_best_rollout_success_rate=config.experiment.save.on_best_rollout_success_rate,
+                )
+                best_return = updated_stats["best_return"]
+                best_success_rate = updated_stats["best_success_rate"]
+                epoch_ckpt_name = updated_stats["epoch_ckpt_name"]
+                should_save_ckpt = (config.experiment.save.enabled and updated_stats["should_save_ckpt"]) or should_save_ckpt
+                if updated_stats["ckpt_reason"] is not None:
+                    ckpt_reason = updated_stats["ckpt_reason"]
 
-        # Only keep saved videos if the ckpt should be saved (but not because of validation score)
-        should_save_video = (should_save_ckpt and (ckpt_reason != "valid")) or config.experiment.keep_all_videos
-        if video_paths is not None and not should_save_video:
-            for env_name in video_paths:
-                os.remove(video_paths[env_name])
+            # Only keep saved videos if the ckpt should be saved (but not because of validation score)
+            should_save_video = (should_save_ckpt and (ckpt_reason != "valid")) or config.experiment.keep_all_videos
+            if video_paths is not None and not should_save_video:
+                for env_name in video_paths:
+                    os.remove(video_paths[env_name])
 
-        # Save model checkpoints based on conditions (success rate, validation loss, etc)
-        if should_save_ckpt:
-            TrainUtils.save_model(
-                model=model,
-                config=config,
-                env_meta=env_meta,
-                shape_meta=shape_meta,
-                ckpt_path=os.path.join(ckpt_dir, epoch_ckpt_name + ".pth"),
-                obs_normalization_stats=obs_normalization_stats,
-                log_dir=log_dir,
-                ckpt_dir=ckpt_dir,
-                video_dir=video_dir,
-                epoch=epoch,
-            )
+            # Save model checkpoints based on conditions (success rate, validation loss, etc)
+            if should_save_ckpt:
+                TrainUtils.save_model(
+                    model=model,
+                    config=config,
+                    env_meta=env_meta,
+                    shape_meta=shape_meta,
+                    ckpt_path=os.path.join(ckpt_dir, epoch_ckpt_name + ".pth"),
+                    obs_normalization_stats=obs_normalization_stats,
+                    log_dir=log_dir,
+                    ckpt_dir=ckpt_dir,
+                    video_dir=video_dir,
+                    epoch=epoch,
+                )
 
-        # Finally, log memory usage in MB
-        process = psutil.Process(os.getpid())
-        mem_usage = int(process.memory_info().rss / 1000000)
-        data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
-        print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
+            # Finally, log memory usage in MB
+            process = psutil.Process(os.getpid())
+            mem_usage = int(process.memory_info().rss / 1000000)
+            data_logger.record("System/RAM Usage (MB)", mem_usage, epoch)
+            print("\nEpoch {} Memory Usage: {} MB\n".format(epoch, mem_usage))
+    if rank == 0:
+        # terminate logging
+        data_logger.close()
 
-    # terminate logging
-    data_logger.close()
 
-
-def main(args):
+def main(rank, args):
 
     # set torch backend
     import torch
@@ -438,7 +501,8 @@ def main(args):
         config.experiment.name = args.name
 
     # get torch device
-    device = TorchUtils.get_torch_device(try_to_use_cuda=config.train.cuda)
+    device = TorchUtils.get_torch_device(try_to_use_cuda=config.train.cuda, rank=rank)
+    torch.cuda.set_device(device)
 
     # maybe modify config for debugging purposes
     if args.debug:
@@ -466,7 +530,9 @@ def main(args):
     res_str = "finished run successfully!"
 
     try:
-        train(config, device=device, ckpt_path=ckpt_path, ckpt_dict=ckpt_dict, output_dir=args.output_dir, start_from_checkpoint=args.start_from_checkpoint)
+        train(config, device=device, ckpt_path=ckpt_path, ckpt_dict=ckpt_dict, 
+              output_dir=args.output_dir, start_from_checkpoint=args.start_from_checkpoint, 
+              rank=rank, world_size=args.num_gpus, ddp=args.ddp)
     except Exception as e:
         res_str = "run failed with error:\n{}\n\n{}".format(e, traceback.format_exc())
     print(res_str)
@@ -535,6 +601,23 @@ if __name__ == "__main__":
         action='store_true',
         help="set this flag to start from checkpoint (not resume)",
     )
+
+    parser.add_argument(
+        "--ddp", 
+        action='store_true',
+        help="set this flag to use distributed data parallel"
+    )
+
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=1,
+        help="number of gpus to use for distributed data parallel"
+    )
     args = parser.parse_args()
-    main(args)
+
+    if args.ddp:
+        mp.spawn(main, nprocs=args.num_gpus, args=(args,))
+    else:
+        main(0, args)
 

@@ -125,7 +125,6 @@ class SequenceDataset(torch.utils.data.Dataset):
         if self.hdf5_normalize_obs:
             self.obs_normalization_stats = self.normalize_obs()
 
-        self.ep_to_hdf5_file = None
         # maybe store dataset in memory for fast access
         if self.hdf5_cache_mode in ["all", "low_dim"]:
             obs_keys_in_memory = self.obs_keys
@@ -377,8 +376,6 @@ class SequenceDataset(torch.utils.data.Dataset):
         Helper utility to get a dataset for a specific demonstration.
         Takes into account whether the dataset has been loaded into memory.
         """
-        if self.ep_to_hdf5_file is None:
-            self.ep_to_hdf5_file = {ep: self.hdf5_file for ep in self.demos}
         # check if this key should be in memory
         key_should_be_in_memory = (self.hdf5_cache_mode in ["all", "low_dim"])
         if key_should_be_in_memory:
@@ -400,7 +397,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         else:
             # read from file
             hd5key = "data/{}/{}".format(ep, key)
-            ret = self.ep_to_hdf5_file[ep][hd5key]
+            ret = self.hdf5_file[hd5key]
         return ret
 
     def __getitem__(self, index):
