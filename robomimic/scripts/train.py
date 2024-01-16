@@ -292,7 +292,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         exit()
     import signal 
     signal.signal(signal.SIGUSR1, handler)
-
+    group = dist.new_group(list(range(world_size)))
     for epoch in range(epoch, config.train.num_epochs + 1): # epoch numbers start at 1
         step_log = TrainUtils.run_epoch(
             model=model,
@@ -327,15 +327,13 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                 if k.startswith("Time_"):
                     data_logger.record("Timing_Stats/Train_{}".format(k[5:]), v, epoch)
                 else:
-                    group = dist.new_group(list(range(world_size)))
                     tensor = torch.tensor([v])
                     dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
                     data_logger.record("Train/{}".format(k), tensor[0].item() / world_size, epoch)
         else:
             for k, v in step_log.items():
                 if not k.startswith("Time_"):
-                    group = dist.new_group(list(range(world_size)))
-                    tensor = torch.ones(1)
+                    tensor = torch.tensor([v])
                     dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
         # Evaluate the model on validation set
         if config.experiment.validate:
@@ -356,7 +354,6 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     if k.startswith("Time_"):
                         data_logger.record("Timing_Stats/Valid_{}".format(k[5:]), v, epoch)
                     else:
-                        group = dist.new_group(list(range(world_size)))
                         tensor = torch.tensor([v])
                         dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
                         data_logger.record("Valid/{}".format(k), tensor[0].item() / world_size, epoch)
@@ -375,8 +372,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             else:
                 for k, v in step_log.items():
                     if not k.startswith("Time_"):
-                        group = dist.new_group(list(range(world_size)))
-                        tensor = torch.ones(1)
+                        tensor = torch.tensor([v])
                         dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
         # Evaluate the model by by running rollouts
 
