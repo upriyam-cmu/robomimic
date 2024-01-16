@@ -69,7 +69,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     np.random.seed(config.train.seed)
     torch.manual_seed(config.train.seed)
 
-    torch.set_num_threads(2)
+    torch.set_num_threads(1)
 
     print("\n============= New Training Run with Config =============")
     print(config)
@@ -231,6 +231,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         num_workers=config.train.num_data_workers,
         drop_last=True,
         pin_memory=True,
+        persistent_workers=True,
     )
 
     if config.experiment.validate:
