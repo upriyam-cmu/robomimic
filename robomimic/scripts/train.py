@@ -194,8 +194,8 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     print("encoder params: ", format_parameters(num_enc_params))
 
     model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
-    setup(rank, world_size)
     if ddp:
+        setup(rank, world_size)
         model.nets['policy'] = nn.parallel.DistributedDataParallel(model.nets['policy'], device_ids=[rank])
 
     print("")
@@ -292,7 +292,9 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         exit()
     import signal 
     signal.signal(signal.SIGUSR1, handler)
-    group = dist.new_group(list(range(world_size)))
+    if ddp:
+        # this is used for doing all-reduce on logs across ddp processes
+        group = dist.new_group(list(range(world_size)))
     for epoch in range(epoch, config.train.num_epochs + 1): # epoch numbers start at 1
         step_log = TrainUtils.run_epoch(
             model=model,
@@ -327,9 +329,12 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                 if k.startswith("Time_"):
                     data_logger.record("Timing_Stats/Train_{}".format(k[5:]), v, epoch)
                 else:
-                    tensor = torch.tensor([v])
-                    dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
-                    data_logger.record("Train/{}".format(k), tensor[0].item() / world_size, epoch)
+                    if ddp:
+                        tensor = torch.tensor([v])
+                        dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
+                        data_logger.record("Train/{}".format(k), tensor[0].item() / world_size, epoch)
+                    else:
+                        data_logger.record("Train/{}".format(k), v, epoch)
         else:
             for k, v in step_log.items():
                 if not k.startswith("Time_"):
@@ -354,9 +359,12 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     if k.startswith("Time_"):
                         data_logger.record("Timing_Stats/Valid_{}".format(k[5:]), v, epoch)
                     else:
-                        tensor = torch.tensor([v])
-                        dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
-                        data_logger.record("Valid/{}".format(k), tensor[0].item() / world_size, epoch)
+                        if ddp:
+                            tensor = torch.tensor([v])
+                            dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=group)
+                            data_logger.record("Valid/{}".format(k), tensor[0].item() / world_size, epoch)
+                        else:
+                            data_logger.record("Valid/{}".format(k), v, epoch)
 
                 print("Validation Epoch {}".format(epoch))
                 print(json.dumps(step_log, sort_keys=True, indent=4))
