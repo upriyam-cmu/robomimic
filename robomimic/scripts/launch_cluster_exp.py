@@ -1,3 +1,4 @@
+from copy import copy
 import json
 import os
 import subprocess
@@ -42,12 +43,12 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
 
 # slurm_additional_parameters = {
 #     "partition": "all",
-#     "time": "00:07:00",
+#     "time": "06:00:00",
 #     "gpus": 1,
 #     "cpus_per_gpu": 16,
-#     "mem": "100g",
-#     # "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
-#     "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
+#     "mem": 100,
+#     "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
+#     # "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
 # }
 
 slurm_additional_parameters = {
@@ -55,13 +56,14 @@ slurm_additional_parameters = {
     "time": "3-00:00:00",
     "gpus": 1,
     "cpus_per_gpu": 20,
-    "mem": "62g",
-    "exclude": "matrix-1-[4,6,8,10,12,16,18,20],matrix-0-[24,34,38]", # Throw out non-rtx
+    "mem": 62,
+    # "exclude": "matrix-1-[4,6,8,10,12,16,18,20],matrix-0-[24,34,38]", # Throw out non-rtx
+    "exclude": "matrix-1-[12,16,18],matrix-0-[24,34,38]", # Throw out non-rtx
 }
 
 
 class WrappedCallable(submitit.helpers.Checkpointable):
-    def __init__(self, output_dir, sif_path, python_path, file_path, config_path, start_from_checkpoint):
+    def __init__(self, output_dir, sif_path, python_path, file_path, config_path, start_from_checkpoint, ddp=False, num_gpus=1):
         self.output_dir = output_dir
         self.sif_path = sif_path
         self.python_path = python_path
@@ -69,6 +71,8 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         self.config_path = config_path
         self.p = None
         self.start_from_checkpoint = start_from_checkpoint
+        self.ddp = ddp
+        self.num_gpus = num_gpus
 
     def __call__(self, checkpoint_path=None):
         """
@@ -82,6 +86,10 @@ class WrappedCallable(submitit.helpers.Checkpointable):
             --output_dir {output_dir} --agent {checkpoint_path}"
         if self.start_from_checkpoint:
             cmd += " --start_from_checkpoint"
+        if self.ddp:
+            cmd += " --ddp"
+        if self.num_gpus > 1:
+            cmd += f" --num_gpus {self.num_gpus}"
         print(cmd)
         self.p = subprocess.Popen(cmd, shell=True)
         while True:
@@ -96,7 +104,8 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         time.sleep(30)
         print("setup new callable")
         wrapped_callable = WrappedCallable(
-            self.output_dir, self.sif_path, self.python_path, self.file_path, self.config_path, start_from_checkpoint=False
+            self.output_dir, self.sif_path, self.python_path, self.file_path, 
+            self.config_path, start_from_checkpoint=False, ddp=self.ddp, num_gpus=self.num_gpus
         )
         ckpt_dir = os.path.join(self.output_dir, "models")
         checkpoint_path = os.path.join(ckpt_dir, "model_latest.pth")
@@ -104,7 +113,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         return submitit.helpers.DelayedSubmission(wrapped_callable, checkpoint_path)
 
 
-def run_on_slurm(config_path, sif_path, checkpoint_path=None):
+def run_on_slurm(config_path, sif_path, checkpoint_path=None, ddp=False, num_gpus=1):
     ext_cfg = json.load(open(config_path, "r"))
     config = config_factory(ext_cfg["algo_name"])
     # update config with external json - this will throw errors if
@@ -120,13 +129,17 @@ def run_on_slurm(config_path, sif_path, checkpoint_path=None):
         slurm_max_num_timeout=1000,
     )
     job_name = config.experiment.name
-    slurm_additional_parameters["job_name"] = job_name
-    executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters)
+    slurm_additional_parameters_loc = copy(slurm_additional_parameters)
+    slurm_additional_parameters_loc["job_name"] = job_name
+    slurm_additional_parameters_loc['gpus'] = num_gpus
+    slurm_additional_parameters_loc['mem'] = str(num_gpus * slurm_additional_parameters['mem']) + 'g'
+    print(slurm_additional_parameters)
+    executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters_loc)
     # absolute path to robomimic/scripts/train.py
     file_path = os.path.join(robomimic.__path__[0], "scripts/train.py")
     start_from_checkpoint = True if checkpoint_path is not None else False
     wrapped_callable = WrappedCallable(
-        output_dir, sif_path, python_cmd, file_path, config_path, start_from_checkpoint
+        output_dir, sif_path, python_cmd, file_path, config_path, start_from_checkpoint, ddp=ddp, num_gpus=num_gpus
     )
     # basically if we take in a checkpoint path, we want to start from that checkpoint
     job = executor.submit(wrapped_callable, checkpoint_path)

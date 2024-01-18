@@ -64,11 +64,11 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
         group=1,
         values=[
             "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_true.hdf5",
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
+            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
         ],
         value_names=[
             "table_simple_100K_pcd_params_obs_delta_true",
-            "table_1M_pcd_params_obs_delta_true"
+            # "table_1M_pcd_params_obs_delta_true"
         ]
     )
 
@@ -84,7 +84,7 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
        key="algo.optim_params.policy.learning_rate.initial", 
        name="plr", 
        group=3, 
-       values=[1e-4, 2e-4, 5e-4, 1e-3], 
+       values=[1e-3, 5e-3], 
     )
 
     generator.add_param(
@@ -167,7 +167,7 @@ def main(args):
     import neural_mp
     sif_path = os.path.join(neural_mp.__file__[:-len("neural_mp/__init__.py")], "containers/neural_mp_zsh.sif")
 
-    generator.generate_matrix_commands(sif_path, args.checkpoint_path)
+    generator.generate_matrix_commands(sif_path, args.checkpoint_path, args.ddp, args.num_gpus)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -197,6 +197,25 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="path to checkpoint to start from",
+    )
+
+    parser.add_argument(
+        "--start_from_checkpoint",
+        action='store_true',
+        help="set this flag to start from checkpoint (not resume)",
+    )
+
+    parser.add_argument(
+        "--ddp", 
+        action='store_true',
+        help="set this flag to use distributed data parallel"
+    )
+
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=1,
+        help="number of gpus to use for distributed data parallel"
     )
 
     args = parser.parse_args()
