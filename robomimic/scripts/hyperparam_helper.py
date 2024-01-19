@@ -43,48 +43,56 @@ import robomimic
 import robomimic.utils.hyperparam_utils as HyperparamUtils
 
 
-def make_generator(config_file, script_file):
+def make_generator(config_file, script_file, wandb_proj_name, output_dir):
     """
     Implement this function to setup your own hyperparameter scan!
     """
     generator = HyperparamUtils.ConfigGenerator(
-        base_config_file=config_file, script_file=script_file, wandb_proj_name='neural_mp',
+        base_config_file=config_file, script_file=script_file, wandb_proj_name=wandb_proj_name,
     )
 
+    generator.add_param(
+        key='train.output_dir',
+        name="",
+        group=0,
+        values=[output_dir],
+    )
 
     generator.add_param(
         key="train.data",
         name="ds",
-        group=0,
+        group=1,
         values=[
             "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_true.hdf5",
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
+            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
         ],
         value_names=[
             "table_simple_100K_pcd_params_obs_delta_true",
-            "table_1M_pcd_params_obs_delta_true"
+            # "table_1M_pcd_params_obs_delta_true"
         ]
     )
 
     generator.add_param(
        key="train.batch_size",
        name="bs", 
-       group=1, 
+       group=2, 
        values=[32],
+    #    values=[128],
     )
 
     generator.add_param(
        key="algo.optim_params.policy.learning_rate.initial", 
        name="plr", 
-       group=2, 
-       values=[1e-4, 2e-4, 5e-4, 1e-3], 
+       group=3, 
+       values=[1e-3, 5e-3], 
     )
 
     generator.add_param(
         key="observation.encoder.pcd.core_kwargs.backbone_kwargs.encoder_size", 
         name="size", 
-        group=3, 
+        group=4, 
         values=['medium', 'large'], 
+        # values=['small'], 
     )
 
     #generator.add_param(
@@ -122,7 +130,7 @@ def make_generator(config_file, script_file):
     # generator.add_param(
     #     key="observation.modalities.obs.low_dim",
     #     name="ld",
-    #     group=1,
+    #     group=2,
     #     values=[[], ['current_angles'], ['goal_angles'], ['current_angles', 'goal_angles']],
     #     value_names=['n', 'q', 'g', 'qg'],
     # )
@@ -130,10 +138,11 @@ def make_generator(config_file, script_file):
     # generator.add_param(
     #     key="experiment.pcd_params.target_pcd_type",
     #     name="tpt",
-    #     group=2,
+    #     group=3,
     #     values=['joint', 'ee'],
     #     value_names=['j', 'e'],
     # )
+
 
     return generator
 
@@ -144,13 +153,21 @@ def main(args):
     config_path = os.path.join(args.exp_dir, os.path.basename(args.base_config))
     shutil.copyfile(args.base_config, config_path)
 
+    exp_dir_suffix = os.path.basename(args.exp_dir)
+    wandb_proj_name = exp_dir_suffix
+    output_dir = os.path.join("logs/mp/trained_models", exp_dir_suffix)
+    # set output dir in config
+    config = HyperparamUtils.load_json(config_path)
+    config["experiment"]['name'] = wandb_proj_name
+    HyperparamUtils.save_json(config, config_path)
     # make config generator
-    generator = make_generator(config_file=config_path, script_file=args.script)
+    generator = make_generator(config_file=config_path, script_file=args.script, wandb_proj_name=wandb_proj_name, output_dir=output_dir)
 
     # generate jsons and script
     import neural_mp
     sif_path = os.path.join(neural_mp.__file__[:-len("neural_mp/__init__.py")], "containers/neural_mp_zsh.sif")
-    generator.generate_matrix_commands(sif_path, args.checkpoint_path)
+
+    generator.generate_matrix_commands(sif_path, args.checkpoint_path, args.ddp, args.num_gpus)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -180,6 +197,25 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="path to checkpoint to start from",
+    )
+
+    parser.add_argument(
+        "--start_from_checkpoint",
+        action='store_true',
+        help="set this flag to start from checkpoint (not resume)",
+    )
+
+    parser.add_argument(
+        "--ddp", 
+        action='store_true',
+        help="set this flag to use distributed data parallel"
+    )
+
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=1,
+        help="number of gpus to use for distributed data parallel"
     )
 
     args = parser.parse_args()
