@@ -12,6 +12,7 @@ from collections import OrderedDict
 from tqdm import tqdm
 
 import torch
+from robomimic.models.base_nets import DDPModelWrapper
 
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.env_utils as EnvUtils
@@ -400,6 +401,7 @@ def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=F
         ac_dim=shape_meta["ac_dim"],
         device=device,
     )
+    model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
     model.deserialize(ckpt_dict["model"])
     model.set_train()
     if verbose:

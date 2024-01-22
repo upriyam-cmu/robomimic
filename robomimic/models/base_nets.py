@@ -1157,3 +1157,18 @@ class FeatureAggregator(Module):
             # weighted mean-pooling
             return torch.sum(x * self.agg_weight, dim=1)
         raise Exception("unexpected agg type: {}".forward(self.agg_type))
+
+class DDPModelWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    
+    def forward(self, forward_type, *args, **kwargs):
+        if forward_type == 'train':
+            return self.model.forward_train(*args, **kwargs)
+        elif forward_type == 'step':
+            return self.model.forward_step(*args, **kwargs)
+        elif forward_type == 'get_rnn_init_state':
+            return self.model.get_rnn_init_state(*args, **kwargs)
+        else:
+            return self.model(*args, **kwargs)

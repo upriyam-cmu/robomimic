@@ -33,6 +33,7 @@ from torch.utils.data import DataLoader
 from diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace import setup
 
 import robomimic
+from robomimic.models.base_nets import DDPModelWrapper
 import robomimic.utils.train_utils as TrainUtils
 import robomimic.utils.torch_utils as TorchUtils
 import robomimic.utils.obs_utils as ObsUtils
@@ -44,21 +45,6 @@ from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
 import torch.multiprocessing as mp
 import torch.distributed as dist
 import torch.nn as nn
-
-class DDPModelWrapper(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-    
-    def forward(self, forward_type, *args, **kwargs):
-        if forward_type == 'train':
-            return self.model.forward_train(*args, **kwargs)
-        elif forward_type == 'step':
-            return self.model.forward_step(*args, **kwargs)
-        elif forward_type == 'get_rnn_init_state':
-            return self.model.get_rnn_init_state(*args, **kwargs)
-        else:
-            return self.model(*args, **kwargs)
 
 def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False, rank=0, world_size=1, ddp=False):
     """

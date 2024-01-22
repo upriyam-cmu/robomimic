@@ -328,11 +328,14 @@ class Algo(object):
             model_dict (dict): a dictionary saved by self.serialize() that contains
                 the same keys as @self.network_classes
         """
-        self.nets.load_state_dict(model_dict['model'])
+        net_dict = model_dict['model']
+        opt_dict = model_dict['optimizer']
+        lr_sched_dict = model_dict['lr_sched']
+        self.nets.load_state_dict(net_dict)
         for k in self.optimizers:
-            self.optimizers[k].load_state_dict(model_dict['optimizer'][k])
+            self.optimizers[k].load_state_dict(opt_dict[k])
             if k in self.lr_schedulers and self.lr_schedulers[k] is not None:
-                self.lr_schedulers[k].load_state_dict(model_dict['lr_sched'][k])
+                self.lr_schedulers[k].load_state_dict(lr_sched_dict[k])
 
     def __repr__(self):
         """
