@@ -71,7 +71,8 @@ class EnvMP(EB.EnvBase):
         self._current_reward = None
         self._current_done = None
         self._done = None
-        self.pcd_params = pcd_params
+        self.pcd_params = pcd_params if pcd_params is not None else dict()
+        self.postprocesss_visual_obs = postprocess_visual_obs
         self.env = eval(env_name)(cfg)
 
     def step(self, action):
@@ -156,7 +157,7 @@ class EnvMP(EB.EnvBase):
             if k.endswith('depth'):
                 ob_return[k] = depth_to_rgb(ob_return[k])
                 ob_return[k] = ob_return[k].transpose(2, 0, 1)
-            if 'pcd' in k:
+            if 'pcd' in k and self.postprocesss_visual_obs:
                 ob_return[k] = compute_full_pcd(
                     pcd_params=np.expand_dims(ob_return[k], axis=0),
                     **self.pcd_params
