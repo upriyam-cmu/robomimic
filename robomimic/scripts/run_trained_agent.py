@@ -178,6 +178,16 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
 
 
 def run_trained_agent(args):
+    
+    import torch
+    torch.backends.cudnn.benchmark = True
+    torch.set_float32_matmul_precision("medium")
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    import torch._dynamo                                                    
+    torch._dynamo.config.suppress_errors = True
+    
     # some arg checking
     write_video = (args.video_path is not None)
     assert not (args.render and write_video) # either on-screen or video but not both

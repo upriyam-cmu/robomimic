@@ -463,6 +463,7 @@ def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=
         ac_dim=shape_meta["ac_dim"],
         device=device,
     )
+    model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
     model.deserialize(ckpt_dict["model"])
     model.set_eval()
     model = RolloutPolicy(model, obs_normalization_stats=obs_normalization_stats)
@@ -499,6 +500,7 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
     # metadata from model dict to get info needed to create environment
     env_meta = ckpt_dict["env_metadata"]
     shape_meta = ckpt_dict["shape_metadata"]
+    config, _ = config_from_checkpoint(algo_name=ckpt_dict["algo_name"], ckpt_dict=ckpt_dict, verbose=False)
 
     # create env from saved metadata
     env = EnvUtils.create_env_from_metadata(
@@ -506,8 +508,8 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
         render=render, 
         render_offscreen=render_offscreen,
         use_image_obs=shape_meta["use_images"],
+        pcd_params=config.experiment.pcd_params,
     )
-    config, _ = config_from_checkpoint(algo_name=ckpt_dict["algo_name"], ckpt_dict=ckpt_dict, verbose=False)
     env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
     if verbose:
         print("============= Loaded Environment =============")
