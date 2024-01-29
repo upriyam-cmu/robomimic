@@ -182,7 +182,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         num_enc_params = sum(p.numel() for p in model.nets['policy'].module.model.nets['encoder'].parameters())
     else:
         num_policy_params =sum(p.numel() for p in model.nets['policy'].parameters())
-        num_enc_params = sum(p.numel() for p in model.nets['policy'].nets['encoder'].parameters())
+        num_enc_params = sum(p.numel() for p in model.nets['policy'].model.nets['encoder'].parameters())
     print("Policy params: ", format_parameters(num_policy_params))
     print("encoder params: ", format_parameters(num_enc_params))
 
