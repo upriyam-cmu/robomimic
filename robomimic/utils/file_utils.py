@@ -20,7 +20,8 @@ import robomimic.utils.torch_utils as TorchUtils
 from robomimic.config import config_factory
 from robomimic.algo import algo_factory
 from robomimic.algo import RolloutPolicy
-
+from diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace import setup
+import torch.nn as nn
 
 def create_hdf5_filter_key(hdf5_path, demo_keys, key_name):
     """
@@ -347,7 +348,7 @@ def config_from_checkpoint(algo_name=None, ckpt_path=None, ckpt_dict=None, verbo
 
     return config, ckpt_dict
 
-def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=False):
+def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=False, ddp=False, rank=0, world_size=1):
     """
     This function restores a trained model from a checkpoint file or
     loaded model dictionary.
@@ -402,14 +403,17 @@ def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=F
         device=device,
     )
     model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
-    model.deserialize(ckpt_dict["model"])
+    if ddp:
+        setup(rank, world_size)
+        model.nets['policy'] = nn.parallel.DistributedDataParallel(model.nets['policy'], device_ids=[rank])
+    model.deserialize(ckpt_dict["model"], ddp=ddp)
     model.set_train()
     if verbose:
         print("============= Loaded Policy =============")
         print(model)
     return model, ckpt_dict
 
-def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=False):
+def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=False, ddp=False, rank=0, world_size=1):
     """
     This function restores a trained policy from a checkpoint file or
     loaded model dictionary.
@@ -464,7 +468,10 @@ def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=
         device=device,
     )
     model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
-    model.deserialize(ckpt_dict["model"])
+    if ddp:
+        setup(rank, world_size)
+        model.nets['policy'] = nn.parallel.DistributedDataParallel(model.nets['policy'], device_ids=[rank])
+    model.deserialize(ckpt_dict["model"], ddp=ddp)
     model.set_eval()
     model = RolloutPolicy(model, obs_normalization_stats=obs_normalization_stats)
     if verbose:
