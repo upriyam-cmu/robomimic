@@ -147,7 +147,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         )
     # restore policy
     if ckpt_path is not None and ckpt_path != 'None':
-        model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True)
+        model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True, ddp=ddp, rank=rank, world_size=world_size)
     else:
         model = algo_factory(
             algo_name=config.algo_name,
@@ -156,6 +156,10 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             ac_dim=shape_meta["ac_dim"],
             device=device,
         )
+        model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
+        if ddp:
+            setup(rank, world_size)
+            model.nets['policy'] = nn.parallel.DistributedDataParallel(model.nets['policy'], device_ids=[rank])
     
     if rank == 0:
         # save the config as a json file
@@ -173,16 +177,14 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             return f"{num / 1e9:.2f}G"  # Billions
         else:
             return f"{num / 1e12:.2f}T"  # Trillions
-
-    num_policy_params =sum(p.numel() for p in model.nets['policy'].parameters())
-    num_enc_params = sum(p.numel() for p in model.nets['policy'].nets['encoder'].parameters())
+    if ddp:
+        num_policy_params =sum(p.numel() for p in model.nets['policy'].module.parameters())
+        num_enc_params = sum(p.numel() for p in model.nets['policy'].module.model.nets['encoder'].parameters())
+    else:
+        num_policy_params =sum(p.numel() for p in model.nets['policy'].parameters())
+        num_enc_params = sum(p.numel() for p in model.nets['policy'].model.nets['encoder'].parameters())
     print("Policy params: ", format_parameters(num_policy_params))
     print("encoder params: ", format_parameters(num_enc_params))
-
-    model.nets['policy'] = DDPModelWrapper(model.nets['policy'])
-    if ddp:
-        setup(rank, world_size)
-        model.nets['policy'] = nn.parallel.DistributedDataParallel(model.nets['policy'], device_ids=[rank])
 
     print("")
 
@@ -237,6 +239,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             num_workers=num_workers,
             drop_last=True,
             pin_memory=True,
+            persistent_workers=True,
         )
     else:
         valid_loader = None

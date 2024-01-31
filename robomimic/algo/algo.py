@@ -320,7 +320,7 @@ class Algo(object):
         }
         return checkpoint
 
-    def deserialize(self, model_dict):
+    def deserialize(self, model_dict, ddp=False):
         """
         Load model from a checkpoint.
 
@@ -331,6 +331,10 @@ class Algo(object):
         net_dict = model_dict['model']
         opt_dict = model_dict['optimizer']
         lr_sched_dict = model_dict['lr_sched']
+        if not ddp:
+            # go through all the keys in net_dict and change from policy.module.model.... to policy.model....
+            # this is because the model is saved as a DataParallel object, but we don't want to load it as such
+            net_dict = {k.replace("module.", ""): v for k,v in net_dict.items()}
         self.nets.load_state_dict(net_dict)
         for k in self.optimizers:
             self.optimizers[k].load_state_dict(opt_dict[k])
