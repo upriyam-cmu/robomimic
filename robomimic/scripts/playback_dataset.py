@@ -193,8 +193,8 @@ def playback_trajectory_with_obs(
             if len(pcd_keys) > 0:
                 frames = []
                 for pcd_key in pcd_keys:
-                    pcd = compute_full_pcd(traj_grp[f'obs/{pcd_key}'][()][i:i+1], num_robot_points=2048, num_obstacle_points=4096)
-                    frame = render_single_pointcloud(pcd[0])
+                    pcd = compute_full_pcd(traj_grp[f'obs/{pcd_key}'][()][i:i+1], num_robot_points=256, num_obstacle_points=4096)
+                    frame = render_pointcloud(pcd[0])
                     frames.append(frame)
                 frame = np.concatenate(frames, axis=1)
             else:
@@ -244,9 +244,11 @@ def playback_dataset(args):
                 ),
         )
         ObsUtils.initialize_obs_utils_with_obs_specs(obs_modality_specs=dummy_spec)
-
         env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=args.dataset)
-        env = EnvUtils.create_env_from_metadata(env_meta=env_meta, render=args.render, render_offscreen=write_video, pcd_params=dict(num_robot_points=2048, num_obstacle_points=4096))
+        # env_meta['env_kwargs']['cfg']['task']['mp_kwargs']['set_intermediate_states'] = False
+        # env_meta['env_kwargs']['cfg']['task']['mp_kwargs']['num_execution_steps_per_waypoint'] = 10
+        env_meta['env_kwargs']['cfg']['task']['include_mpi_nets_info_in_logs'] = True
+        env = EnvUtils.create_env_from_metadata(env_meta=env_meta, render=args.render, render_offscreen=write_video, pcd_params=dict(num_robot_points=128, num_obstacle_points=4096))
 
         # some operations for playback are robosuite-specific, so determine if this environment is a robosuite env
         is_robosuite_env = EnvUtils.is_robosuite_env(env_meta)
@@ -307,10 +309,11 @@ def playback_dataset(args):
             first=args.first,
         )
         stats.append(stats_ep)
-    # print stats mean across keys
-    # stats_keys = stats[0].keys()
-    # stats_mean = {k: np.mean([s[k] for s in stats]) for k in stats_keys}
-    # print("Stats mean: ", json.dumps(stats_mean, indent=4))
+    if not args.use_obs:
+        # print stats mean across keys
+        stats_keys = stats[0].keys()
+        stats_mean = {k: np.mean([s[k] for s in stats]) for k in stats_keys}
+        print("Stats mean: ", json.dumps(stats_mean, indent=4))
 
 
     f.close()

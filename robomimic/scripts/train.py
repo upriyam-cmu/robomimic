@@ -224,7 +224,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
 
     if config.experiment.validate:
         # cap num workers for validation dataset at 1
-        num_workers = min(config.train.num_data_workers, 1)
+        num_workers = config.train.num_data_workers
         if ddp:
             valid_sampler = torch.utils.data.distributed.DistributedSampler(validset,
                                                                         num_replicas=world_size,
@@ -333,14 +333,14 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         if config.experiment.validate:
             with torch.no_grad():
                 try:
-                    low_noise_eval = model.nets["policy"].low_noise_eval
-                    model.nets["policy"].low_noise_eval = False
+                    low_noise_eval = model.nets['policy'].model.low_noise_eval
+                    model.nets['policy'].model.low_noise_eval = False
                 except:
                     low_noise_eval = None
                     pass
                 step_log = TrainUtils.run_epoch(model=model, data_loader=valid_loader, epoch=epoch, validate=True, num_steps=valid_num_steps)
                 try:
-                    model.nets["policy"].low_noise_eval = low_noise_eval
+                    model.nets['policy'].model.low_noise_eval = low_noise_eval
                 except:
                     pass
             if rank == 0:

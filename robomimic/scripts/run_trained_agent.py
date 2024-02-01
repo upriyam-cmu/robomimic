@@ -53,12 +53,14 @@ Example usage:
 """
 import argparse
 import json
+import random
 import h5py
 import imageio
 import numpy as np
 from copy import deepcopy
 
 import torch
+from tqdm import tqdm
 
 import robomimic
 import robomimic.utils.file_utils as FileUtils
@@ -188,6 +190,12 @@ def run_trained_agent(args):
     import torch._dynamo                                                    
     torch._dynamo.config.suppress_errors = True
     
+    # maybe set seed
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        random.seed(args.seed) 
+    
     # some arg checking
     write_video = (args.video_path is not None)
     assert not (args.render and write_video) # either on-screen or video but not both
@@ -213,6 +221,8 @@ def run_trained_agent(args):
         rollout_horizon = config.experiment.rollout.horizon
 
     # create environment from saved checkpoint
+    # ckpt_dict['env_metadata']['env_kwargs']['cfg']['task']['mp_kwargs']['set_intermediate_states'] = False
+    # ckpt_dict['env_metadata']['env_kwargs']['cfg']['task']['mp_kwargs']['num_execution_steps_per_waypoint'] = 10
     env, _ = FileUtils.env_from_checkpoint(
         ckpt_dict=ckpt_dict, 
         env_name=args.env, 
@@ -220,11 +230,6 @@ def run_trained_agent(args):
         render_offscreen=(args.video_path is not None), 
         verbose=True,
     )
-
-    # maybe set seed
-    if args.seed is not None:
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
 
     # maybe create video writer
     video_writer = None
@@ -239,7 +244,7 @@ def run_trained_agent(args):
         total_samples = 0
 
     rollout_stats = []
-    for i in range(rollout_num_episodes):
+    for i in tqdm(range(rollout_num_episodes)):
         stats, traj = rollout(
             policy=policy, 
             env=env, 

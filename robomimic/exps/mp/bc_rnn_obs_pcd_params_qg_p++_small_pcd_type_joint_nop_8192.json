@@ -2,7 +2,7 @@
     "algo_name": "bc",
     "experiment": {
         "name": "bc_rnn_mp_pcd_only",
-        "validate": true,
+        "validate": false,
         "logging": {
             "terminal_output_to_txt": false,
             "log_tb": true,
@@ -36,7 +36,7 @@
         },
         "pcd_params": {
             "num_robot_points": 2048,
-            "num_obstacle_points": 4096,
+            "num_obstacle_points": 8192,
             "target_pcd_type": "joint"
         }
     },
@@ -49,7 +49,7 @@
         "hdf5_load_next_obs": false,
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
-        "hdf5_validation_filter_key": "valid",
+        "hdf5_validation_filter_key": null,
         "seq_length": 2,
         "pad_seq_length": true,
         "frame_stack": 1,
