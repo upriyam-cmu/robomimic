@@ -8,6 +8,7 @@ import json
 from copy import deepcopy
 
 from omegaconf import DictConfig, OmegaConf
+from neural_mp.franka_utils import normalize_franka_joints
 import robomimic.envs.env_base as EB
 import robomimic.utils.obs_utils as ObsUtils
 from neural_mp.envs import *
@@ -45,6 +46,7 @@ class EnvMP(EB.EnvBase):
         use_image_obs=False, 
         postprocess_visual_obs=True, 
         pcd_params=None,
+        mpinets_enabled=False,
         **kwargs,
     ):
         """
@@ -73,6 +75,7 @@ class EnvMP(EB.EnvBase):
         self._done = None
         self.pcd_params = pcd_params if pcd_params is not None else dict()
         self.postprocesss_visual_obs = postprocess_visual_obs
+        self.mpinets_enabled = mpinets_enabled
         self.env = eval(env_name)(cfg)
 
     def step(self, action):
@@ -88,7 +91,7 @@ class EnvMP(EB.EnvBase):
             done (bool): whether the task is done
             info (dict): extra information
         """
-        obs, reward, done, info = self.env.step(action.copy())
+        obs, reward, done, info = self.env.step(action.copy(), unnormalize_delta_actions=self.mpinets_enabled)
         self._current_obs = obs
         self._current_reward = reward
         self._current_done = done
@@ -149,6 +152,7 @@ class EnvMP(EB.EnvBase):
         if obs is None:
             obs = self.env.get_observation()
         ob_return = OrderedDict()
+        saved_pcd_params = None
         for k in obs:
             ob_return[k] = obs[k].copy()
             if k.endswith('image'):
@@ -158,10 +162,15 @@ class EnvMP(EB.EnvBase):
                 ob_return[k] = depth_to_rgb(ob_return[k])
                 ob_return[k] = ob_return[k].transpose(2, 0, 1)
             if 'pcd' in k and self.postprocesss_visual_obs:
+                saved_pcd_params = ob_return[k]
                 ob_return[k] = compute_full_pcd(
                     pcd_params=np.expand_dims(ob_return[k], axis=0),
                     **self.pcd_params
                 )[0]
+            if 'angles' in k:
+                ob_return[k] = normalize_franka_joints(ob_return[k])
+        if saved_pcd_params is not None:
+            ob_return['saved_params'] = saved_pcd_params
         return ob_return
 
     def get_state(self):

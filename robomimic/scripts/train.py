@@ -130,6 +130,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     render_offscreen=config.experiment.render_video,
                     use_image_obs=shape_meta["use_images"],
                     pcd_params=config.experiment.pcd_params,
+                    mpinets_enabled=config.algo.mpinets.enabled,
                 )
                 env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
                 envs[env.name] = env
@@ -219,7 +220,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         num_workers=config.train.num_data_workers,
         drop_last=True,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=True if config.train.num_data_workers > 0 else False,
     )
 
     if config.experiment.validate:
@@ -239,7 +240,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
             num_workers=num_workers,
             drop_last=True,
             pin_memory=True,
-            persistent_workers=True,
+            persistent_workers=True if config.train.num_data_workers > 0 else False,
         )
     else:
         valid_loader = None

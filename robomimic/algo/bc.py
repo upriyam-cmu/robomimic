@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
+from neural_mp.envs.franka_pybullet_env import decompose_scene_pcd_params_obs_batched
+from neural_mp import franka_utils
 
 import robomimic.models.base_nets as BaseNets
 import robomimic.models.obs_nets as ObsNets
@@ -18,7 +20,7 @@ import robomimic.utils.torch_utils as TorchUtils
 import robomimic.utils.obs_utils as ObsUtils
 
 from robomimic.algo import register_algo_factory_func, PolicyAlgo
-
+import neural_mp.mpinets_loss as loss
 
 @register_algo_factory_func("bc")
 def algo_config_to_class(algo_config):
@@ -42,8 +44,13 @@ def algo_config_to_class(algo_config):
     rnn_enabled = algo_config.rnn.enabled
     # support legacy configs that do not have "transformer" item
     transformer_enabled = ("transformer" in algo_config) and algo_config.transformer.enabled
-
-    if gaussian_enabled:
+    
+    mpinets_enabled = algo_config.mpinets.enabled if "mpinets" in algo_config else False
+    
+    if mpinets_enabled:
+        algo_class = BC_MpiNet
+        algo_kwargs = {}
+    elif gaussian_enabled:
         if rnn_enabled:
             raise NotImplementedError
         elif transformer_enabled:
@@ -249,6 +256,113 @@ class BC(PolicyAlgo):
         assert not self.nets.training
         return self.nets["policy"]('forward', obs_dict, goal_dict=goal_dict)
 
+class BC_MpiNet(BC):
+    """
+    BC training with MpiNet loss.
+    """
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_fun = loss.CollisionAndBCLossContainer()
+    
+    def _create_networks(self):
+        """
+        Creates networks and places them into @self.nets.
+        """
+        self.nets = nn.ModuleDict()
+        self.nets["policy"] = PolicyNets.ActorNetwork(
+            obs_shapes=self.obs_shapes,
+            goal_shapes=self.goal_shapes,
+            ac_dim=self.ac_dim,
+            mlp_layer_dims=self.algo_config.actor_layer_dims,
+            mlp_activation=eval(self.algo_config.actor_activation),
+            encoder_kwargs=ObsUtils.obs_encoder_kwargs_from_config(self.obs_config.encoder),
+        )
+        self.nets = self.nets.float().to(self.device)
+        
+    def _compute_losses(self, predictions, batch):
+        """
+        Internal helper function for BC algo class. Compute losses based on
+        network outputs in @predictions dict, using reference labels in @batch.
+
+        Args:
+            predictions (dict): dictionary containing network outputs, from @_forward_training
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+        Returns:
+            losses (dict): dictionary of losses computed over the batch
+        """
+        curr_angles = batch['obs']['current_angles'] # this is normalized
+        y_hat = torch.clamp(curr_angles + predictions['actions'], min=-1, max=1) # note this means we need to unnormalize the predictions in the env
+        # y = batch["actions"] + franka_utils.unnormalize_franka_joints(curr_angles)
+        # y_norm = franka_utils.normalize_franka_joints(y)
+        scene_pcd_params = batch["obs"]["saved_params"][:, 14:]
+        cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
+        if cylinder_centers.shape[1] == 0:
+            cylinder_centers = torch.zeros_like(cuboid_centers)
+            cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
+            cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
+            cylinder_quats = torch.zeros_like(cuboid_quats)
+        collision_loss, point_match_loss = self.loss_fun(
+            y_hat,
+            cuboid_centers.reshape(-1, M, 3),
+            cuboid_dims.reshape(-1, M, 3),
+            cuboid_quats.reshape(-1, M, 4),
+            cylinder_centers.reshape(-1, M, 3),
+            cylinder_radii.reshape(-1, M, 1),
+            cylinder_heights.reshape(-1, M, 1),
+            cylinder_quats.reshape(-1, M, 4),
+            batch['actions'], # assume we are training with absolute actions
+        )
+        losses = OrderedDict()
+        a_target = batch["actions"]
+        # convert a_target into delta action
+        a_target = a_target - curr_angles
+        actions = predictions["actions"]
+        losses["l2_loss"] = nn.MSELoss()(actions, a_target)
+        losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
+        # cosine direction loss on eef delta position
+        losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
+        losses['collision_loss'] = collision_loss
+        losses['point_match_loss'] = point_match_loss
+        action_losses = [
+            self.algo_config.loss.l2_weight * losses["l2_loss"],
+            self.algo_config.loss.l1_weight * losses["l1_loss"],
+            self.algo_config.loss.cos_weight * losses["cos_loss"],
+            self.algo_config.loss.collision_weight * losses['collision_loss'],
+            self.algo_config.loss.point_match_weight * losses['point_match_loss'],
+        ]
+        action_loss = sum(action_losses)
+        losses["action_loss"] = action_loss
+        return losses
+
+    def log_info(self, info):
+        """
+        Process info dictionary from @train_on_batch to summarize
+        information to pass to tensorboard for logging.
+
+        Args:
+            info (dict): dictionary of info
+
+        Returns:
+            loss_log (dict): name -> summary statistic
+        """
+        log = PolicyAlgo.log_info(self, info)
+        log["Loss"] = info["losses"]["action_loss"].item()
+        if "policy_grad_norms" in info:
+            log["Policy_Grad_Norms"] = info["policy_grad_norms"]
+        if "l2_loss" in info["losses"]:
+            log["L2_Loss"] = info["losses"]["l2_loss"].item()
+        if "l1_loss" in info["losses"]:
+            log["L1_Loss"] = info["losses"]["l1_loss"].item()
+        if "cos_loss" in info["losses"]:
+            log["Cosine_Loss"] = info["losses"]["cos_loss"].item()
+        if "collision_loss" in info["losses"]:
+            log["Collision_Loss"] = info["losses"]["collision_loss"].item()
+        if "point_match_loss" in info["losses"]:
+            log["Point_Match_Loss"] = info["losses"]["point_match_loss"].item()
+        return log
 
 class BC_Gaussian(BC):
     """
@@ -359,6 +473,7 @@ class BC_GMM(BC_Gaussian):
             goal_shapes=self.goal_shapes,
             ac_dim=self.ac_dim,
             mlp_layer_dims=self.algo_config.actor_layer_dims,
+            mlp_activation=eval(self.algo_config.actor_activation),
             num_modes=self.algo_config.gmm.num_modes,
             min_std=self.algo_config.gmm.min_std,
             std_activation=self.algo_config.gmm.std_activation,
@@ -682,8 +797,6 @@ class BC_RNN_GMM(BC_RNN):
             log["L1_Loss"] = info["losses"]["l1_loss"].item()
         if "cos_loss" in info["losses"]:
             log["Cosine_Loss"] = info["losses"]["cos_loss"].item()
-        if "policy_grad_norms" in info:
-            log["Policy_Grad_Norms"] = info["policy_grad_norms"]
         return log
 
 

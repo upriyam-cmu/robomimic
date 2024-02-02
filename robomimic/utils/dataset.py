@@ -17,6 +17,8 @@ from tqdm import tqdm
 
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 from neural_mp.envs.franka_pybullet_env import depth_to_rgb
+from neural_mp.franka_utils import normalize_franka_joints
+from neural_mp.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -541,17 +543,34 @@ class SequenceDataset(torch.utils.data.Dataset):
         obs = {k.split('/')[1]: obs[k] for k in obs}  # strip the prefix
         if self.get_pad_mask:
             obs["pad_mask"] = pad_mask
+            
+        # TODO: make this less hardcoded
+        if 'current_angles' in obs:
+            # compute noise to add to the current angles and the compute_pcd_params (if present)
+            noise = np.random.normal(0, 0.015, obs['current_angles'].shape)
+            obs['current_angles'] += noise
+            # clamp to joint limits
+            obs['current_angles'] = np.clip(obs['current_angles'], FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS)
+        if 'compute_pcd_params' in obs:
+            obs['compute_pcd_params'][:, :7] = obs['current_angles']
+        compute_pcd_params_saved = None
         for k in obs:
             if 'pcd' in k:
+                compute_pcd_params_saved = obs[k]
                 obs[k] = compute_full_pcd(
-                pcd_params=obs[k],
-                **self.pcd_params
-            )
+                    pcd_params=obs[k],
+                    **self.pcd_params
+                )
+                
             if 'depth' in k:
                 new_obs = []
                 for idx in range(obs[k].shape[0]):
                     new_obs.append(depth_to_rgb(obs[k][idx]))
                 obs[k] = np.array(new_obs)
+            if 'angles' in k:
+                obs[k] = normalize_franka_joints(obs[k])
+        if compute_pcd_params_saved is not None:
+            obs['saved_params'] = compute_pcd_params_saved
         return obs
 
     def get_dataset_sequence_from_demo(self, demo_id, index_in_demo, keys, num_frames_to_stack=0, seq_length=1):

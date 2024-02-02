@@ -38,6 +38,7 @@ class BCConfig(BaseConfig):
 
         # MLP network architecture (layers after observation encoder and RNN, if present)
         self.algo.actor_layer_dims = (1024, 1024)
+        self.algo.actor_activation = "nn.ReLU"  # activation function for MLP
 
         # stochastic Gaussian policy settings
         self.algo.gaussian.enabled = False              # whether to train a Gaussian policy
@@ -108,3 +109,8 @@ class BCConfig(BaseConfig):
         # mp settings
         self.experiment.rollout.evaluate_on_dataset = False
         self.experiment.rollout.evaluate_on_dataset_filter_key = 'valid'
+        
+        #mpinets settings
+        self.algo.mpinets.enabled = False
+        self.algo.loss.collision_weight = 0.0
+        self.algo.loss.point_match_weight = 0.0

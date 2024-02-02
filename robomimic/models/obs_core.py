@@ -54,7 +54,6 @@ class EncoderCore(BaseNets.Module):
         """
         ObsUtils.register_encoder_core(cls)
 
-
 """
 ================================================
 Visual Core Networks (Backbone + Pool)
@@ -265,7 +264,7 @@ class PcdCore(EncoderCore, BaseNets.PointNetEncoder):
         msg = header + '(' + msg + '\n)'
         return msg
 
-class LowDimCore(EncoderCore, BaseNets.MLP):
+class LowDimCore(EncoderCore):
     """
     A network block that combines a visual backbone network with optional pooling
     and linear layers.
@@ -295,9 +294,7 @@ class LowDimCore(EncoderCore, BaseNets.MLP):
         if backbone_kwargs is None:
             backbone_kwargs = dict()
 
-        if 'activation' in backbone_kwargs:
-            if 'leaky_relu' in backbone_kwargs['activation']:
-                backbone_kwargs['activation'] = nn.LeakyReLU
+        backbone_kwargs['activation'] = eval(backbone_kwargs['activation'])
         assert isinstance(backbone_class, str)
         self.backbone = eval(backbone_class)(**backbone_kwargs)
 
@@ -317,13 +314,13 @@ class LowDimCore(EncoderCore, BaseNets.MLP):
         Returns:
             out_shape ([int]): list of integers corresponding to output shape
         """
-        return [self.backbone.nets.output_shape(input_shape)]
+        return [self.backbone.output_shape(input_shape)]
 
     def forward(self, inputs):
         """
         Forward pass through visual core.
         """
-        return super(PcdCore, self).forward(inputs)
+        return self.nets(inputs)
 
     def __repr__(self):
         """Pretty print network."""

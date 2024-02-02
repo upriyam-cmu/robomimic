@@ -516,6 +516,7 @@ def env_from_checkpoint(ckpt_path=None, ckpt_dict=None, env_name=None, render=Fa
         render_offscreen=render_offscreen,
         use_image_obs=shape_meta["use_images"],
         pcd_params=config.experiment.pcd_params,
+        mpinets_enabled=config.algo.mpinets.enabled,
     )
     env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
     if verbose:

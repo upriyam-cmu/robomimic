@@ -33,6 +33,7 @@ class ActorNetwork(MIMO_MLP):
         obs_shapes,
         ac_dim,
         mlp_layer_dims,
+        activation=nn.ReLU,
         goal_shapes=None,
         encoder_kwargs=None,
     ):
@@ -88,6 +89,7 @@ class ActorNetwork(MIMO_MLP):
             output_shapes=output_shapes,
             layer_dims=mlp_layer_dims,
             encoder_kwargs=encoder_kwargs,
+            activation=activation,
         )
 
     def _get_output_shapes(self):
@@ -404,6 +406,7 @@ class GMMActorNetwork(ActorNetwork):
         obs_shapes,
         ac_dim,
         mlp_layer_dims,
+        mlp_activation=nn.ReLU,
         num_modes=5,
         min_std=0.01,
         std_activation="softplus",
@@ -476,6 +479,7 @@ class GMMActorNetwork(ActorNetwork):
             obs_shapes=obs_shapes,
             ac_dim=ac_dim,
             mlp_layer_dims=mlp_layer_dims,
+            activation=mlp_activation,
             goal_shapes=goal_shapes,
             encoder_kwargs=encoder_kwargs,
         )

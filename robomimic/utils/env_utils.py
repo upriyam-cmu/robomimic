@@ -190,7 +190,8 @@ def create_env_from_metadata(
     render=False, 
     render_offscreen=False, 
     use_image_obs=False, 
-    pcd_params=None
+    pcd_params=None,
+    mpinets_enabled=False,
 ):
     """
     Create environment.
@@ -228,6 +229,7 @@ def create_env_from_metadata(
         render_offscreen=render_offscreen, 
         use_image_obs=use_image_obs, 
         pcd_params=pcd_params,
+        mpinets_enabled=mpinets_enabled,
         **env_kwargs,
     )
     check_env_version(env, env_meta)

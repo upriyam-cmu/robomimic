@@ -61,6 +61,9 @@ from copy import deepcopy
 
 import torch
 from tqdm import tqdm
+from neural_mp.envs.franka_pybullet_env import decompose_scene_pcd_params_obs_batched
+from neural_mp.franka_utils import normalize_franka_joints
+from neural_mp.mpinets_loss import CollisionAndBCLossContainer
 
 import robomimic
 import robomimic.utils.file_utils as FileUtils
@@ -111,15 +114,16 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
     if return_obs:
         # store observations too
         traj.update(dict(obs=[], next_obs=[]))
+    loss_fun = CollisionAndBCLossContainer()
     try:
         for step_i in range(horizon):
 
             # get action from policy
             act = policy(ob=obs)
-
+            
             # play action
             next_obs, r, done, info = env.step(act)
-
+            
             # compute reward
             total_reward += r
             success = env.is_success()["task"]
