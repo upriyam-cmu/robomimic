@@ -275,7 +275,7 @@ class BC_MpiNet(BC):
             goal_shapes=self.goal_shapes,
             ac_dim=self.ac_dim,
             mlp_layer_dims=self.algo_config.actor_layer_dims,
-            mlp_activation=eval(self.algo_config.actor_activation),
+            activation=eval(self.algo_config.actor_activation),
             encoder_kwargs=ObsUtils.obs_encoder_kwargs_from_config(self.obs_config.encoder),
         )
         self.nets = self.nets.float().to(self.device)
