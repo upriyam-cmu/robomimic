@@ -48,8 +48,12 @@ def algo_config_to_class(algo_config):
     mpinets_enabled = algo_config.mpinets.enabled if "mpinets" in algo_config else False
     
     if mpinets_enabled:
-        algo_class = BC_MpiNet
-        algo_kwargs = {}
+        if rnn_enabled:
+            algo_class = BC_RNN_MpiNet
+            algo_kwargs = {}
+        else:
+            algo_class = BC_MpiNet
+            algo_kwargs = {}
     elif gaussian_enabled:
         if rnn_enabled:
             raise NotImplementedError
@@ -295,8 +299,6 @@ class BC_MpiNet(BC):
         """
         curr_angles = batch['obs']['current_angles'] # this is normalized
         y_hat = torch.clamp(curr_angles + predictions['actions'], min=-1, max=1) # note this means we need to unnormalize the predictions in the env
-        # y = batch["actions"] + franka_utils.unnormalize_franka_joints(curr_angles)
-        # y_norm = franka_utils.normalize_franka_joints(y)
         scene_pcd_params = batch["obs"]["saved_params"][:, 14:]
         cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
         if cylinder_centers.shape[1] == 0:
@@ -648,6 +650,161 @@ class BC_RNN(BC):
         # we move to device first before float conversion because image observation modalities will be uint8 -
         # this minimizes the amount of data transferred to GPU
         return TensorUtils.to_float(TensorUtils.to_device(input_batch, self.device))
+
+    def get_action(self, obs_dict, goal_dict=None):
+        """
+        Get policy action outputs.
+
+        Args:
+            obs_dict (dict): current observation
+            goal_dict (dict): (optional) goal
+
+        Returns:
+            action (torch.Tensor): action tensor
+        """
+        assert not self.nets.training
+
+        if self._rnn_hidden_state is None or self._rnn_counter % self._rnn_horizon == 0:
+            batch_size = list(obs_dict.values())[0].shape[0]
+            self._rnn_hidden_state = self.nets["policy"]('get_rnn_init_state', batch_size=batch_size, device=self.device)
+
+            if self._rnn_is_open_loop:
+                # remember the initial observation, and use it instead of the current observation
+                # for open-loop action sequence prediction
+                self._open_loop_obs = TensorUtils.clone(TensorUtils.detach(obs_dict))
+
+        obs_to_use = obs_dict
+        if self._rnn_is_open_loop:
+            # replace current obs with last recorded obs
+            obs_to_use = self._open_loop_obs
+
+        self._rnn_counter += 1
+        action, self._rnn_hidden_state = self.nets['policy']('step', 
+            obs_to_use, goal_dict=goal_dict, rnn_state=self._rnn_hidden_state)
+        return action
+
+    def reset(self):
+        """
+        Reset algo state to prepare for environment rollouts.
+        """
+        self._rnn_hidden_state = None
+        self._rnn_counter = 0
+
+class BC_RNN_MpiNet(BC_MpiNet):
+    """
+    BC training with an RNN policy.
+    """
+    def _create_networks(self):
+        """
+        Creates networks and places them into @self.nets.
+        """
+        self.nets = nn.ModuleDict()
+        self.nets["policy"] = PolicyNets.RNNActorNetwork(
+            obs_shapes=self.obs_shapes,
+            goal_shapes=self.goal_shapes,
+            ac_dim=self.ac_dim,
+            mlp_layer_dims=self.algo_config.actor_layer_dims,
+            encoder_kwargs=ObsUtils.obs_encoder_kwargs_from_config(self.obs_config.encoder),
+            **BaseNets.rnn_args_from_config(self.algo_config.rnn),
+        )
+
+        self._rnn_hidden_state = None
+        self._rnn_horizon = self.algo_config.rnn.horizon
+        self._rnn_counter = 0
+        self._rnn_is_open_loop = self.algo_config.rnn.get("open_loop", False)
+
+        self.nets = self.nets.float().to(self.device)
+
+    def process_batch_for_training(self, batch):
+        """
+        Processes input batch from a data loader to filter out
+        relevant information and prepare the batch for training.
+
+        Args:
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader
+
+        Returns:
+            input_batch (dict): processed and filtered batch that
+                will be used for training
+        """
+        input_batch = dict()
+        input_batch["obs"] = batch["obs"]
+        input_batch["goal_obs"] = batch.get("goal_obs", None) # goals may not be present
+        input_batch["actions"] = batch["actions"]
+
+        if self._rnn_is_open_loop:
+            # replace the observation sequence with one that only consists of the first observation.
+            # This way, all actions are predicted "open-loop" after the first observation, based
+            # on the rnn hidden state.
+            n_steps = batch["actions"].shape[1]
+            obs_seq_start = TensorUtils.index_at_time(batch["obs"], ind=0)
+            input_batch["obs"] = TensorUtils.unsqueeze_expand_at(obs_seq_start, size=n_steps, dim=1)
+
+        # we move to device first before float conversion because image observation modalities will be uint8 -
+        # this minimizes the amount of data transferred to GPU
+        return TensorUtils.to_float(TensorUtils.to_device(input_batch, self.device))
+
+    def _compute_losses(self, predictions, batch):
+        """
+        Internal helper function for BC algo class. Compute losses based on
+        network outputs in @predictions dict, using reference labels in @batch.
+
+        Args:
+            predictions (dict): dictionary containing network outputs, from @_forward_training
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+        Returns:
+            losses (dict): dictionary of losses computed over the batch
+        """
+        curr_angles = batch['obs']['current_angles'] # this is normalized
+        # reshape seq dim to batch dim
+        curr_angles = curr_angles.reshape(-1, curr_angles.shape[-1])
+        act_pred = predictions['actions'].reshape(-1, predictions['actions'].shape[-1])
+        gt_actions = batch['actions'].reshape(-1, batch['actions'].shape[-1]) # assume we are training with absolute actions
+        y_hat = torch.clamp(curr_angles + act_pred, min=-1, max=1) # note this means we need to unnormalize the predictions in the env
+        
+        scene_pcd_params = batch["obs"]["saved_params"].reshape(-1, batch["obs"]["saved_params"].shape[-1])
+        scene_pcd_params = scene_pcd_params[:, 14:]
+        cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
+        if cylinder_centers.shape[1] == 0:
+            cylinder_centers = torch.zeros_like(cuboid_centers)
+            cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
+            cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
+            cylinder_quats = torch.zeros_like(cuboid_quats)
+        collision_loss, point_match_loss = self.loss_fun(
+            y_hat,
+            cuboid_centers.reshape(-1, M, 3),
+            cuboid_dims.reshape(-1, M, 3),
+            cuboid_quats.reshape(-1, M, 4),
+            cylinder_centers.reshape(-1, M, 3),
+            cylinder_radii.reshape(-1, M, 1),
+            cylinder_heights.reshape(-1, M, 1),
+            cylinder_quats.reshape(-1, M, 4),
+            gt_actions
+        )
+        losses = OrderedDict()
+        a_target = gt_actions
+        # convert a_target into delta action
+        a_target = a_target - curr_angles
+        actions = act_pred
+        losses["l2_loss"] = nn.MSELoss()(actions, a_target)
+        losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
+        # cosine direction loss on eef delta position
+        losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
+        losses['collision_loss'] = collision_loss
+        losses['point_match_loss'] = point_match_loss
+        action_losses = [
+            self.algo_config.loss.l2_weight * losses["l2_loss"],
+            self.algo_config.loss.l1_weight * losses["l1_loss"],
+            self.algo_config.loss.cos_weight * losses["cos_loss"],
+            self.algo_config.loss.collision_weight * losses['collision_loss'],
+            self.algo_config.loss.point_match_weight * losses['point_match_loss'],
+        ]
+        action_loss = sum(action_losses)
+        losses["action_loss"] = action_loss
+        return losses
 
     def get_action(self, obs_dict, goal_dict=None):
         """
