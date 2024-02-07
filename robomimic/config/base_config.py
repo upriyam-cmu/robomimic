@@ -126,6 +126,7 @@ class BaseConfig(Config):
         self.experiment.pcd_params.num_obstacle_points = 4096
         self.experiment.pcd_params.target_pcd_type = 'joint'
         self.experiment.pcd_params.noise_scale = 0.0
+        self.experiment.pcd_params.normalize_joint_angles = False
 
     def train_config(self):
         """

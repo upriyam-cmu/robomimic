@@ -567,7 +567,7 @@ class SequenceDataset(torch.utils.data.Dataset):
                 for idx in range(obs[k].shape[0]):
                     new_obs.append(depth_to_rgb(obs[k][idx]))
                 obs[k] = np.array(new_obs)
-            if 'angles' in k:
+            if 'angles' in k and self.pcd_params['normalize_joint_angles']:
                 obs[k] = normalize_franka_joints(obs[k])
         if compute_pcd_params_saved is not None:
             obs['saved_params'] = compute_pcd_params_saved
