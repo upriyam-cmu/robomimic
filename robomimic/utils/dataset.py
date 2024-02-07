@@ -547,7 +547,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         # TODO: make this less hardcoded
         if 'current_angles' in obs:
             # compute noise to add to the current angles and the compute_pcd_params (if present)
-            noise = np.random.normal(0, 0.015, obs['current_angles'].shape)
+            noise = np.random.normal(0, self.pcd_params['noise_scale'], obs['current_angles'].shape)
             obs['current_angles'] += noise
             # clamp to joint limits
             obs['current_angles'] = np.clip(obs['current_angles'], FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS)

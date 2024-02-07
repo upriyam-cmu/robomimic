@@ -877,6 +877,7 @@ class BC_RNN_GMM(BC_RNN):
         self._rnn_is_open_loop = self.algo_config.rnn.get("open_loop", False)
 
         self.nets = self.nets.float().to(self.device)
+        self.collision_loss = loss.CollisionLossContainer()
 
     def _forward_training(self, batch):
         """
@@ -899,11 +900,47 @@ class BC_RNN_GMM(BC_RNN):
         # the log probability computation will be correct
         assert len(dists.batch_shape) == 2 # [B, T]
         log_probs = dists.log_prob(batch["actions"])
-
+        
         predictions = OrderedDict(
             log_probs=log_probs,
             actions=dists.sample(),
         )
+        
+        if self.algo_config.loss.collision_weight > 0:
+            curr_angles = batch['obs']['current_angles'] # this is normalized
+            # reshape seq dim to batch dim
+            weights = dists.mixture_distribution.logits.exp() # B, T, num_modes
+            B, T, num_modes = weights.shape
+            means = dists.component_distribution.mean # B, T, num_modes, action_dim
+            
+            # act_pred = predictions['actions'].reshape(-1, predictions['actions'].shape[-1])
+            curr_angles = curr_angles.unsqueeze(2).repeat(1, 1, num_modes, 1).reshape(-1, curr_angles.shape[-1])
+            act_pred = means.reshape(-1, means.shape[-1])
+            y_hat = torch.clamp(curr_angles + act_pred, min=-1, max=1) # note this means we need to unnormalize the predictions in the env
+            
+            scene_pcd_params = batch["obs"]["saved_params"].unsqueeze(2).repeat(1, 1, num_modes, 1).reshape(-1, batch["obs"]["saved_params"].shape[-1])
+            scene_pcd_params = scene_pcd_params[:, 14:]
+            cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
+            if cylinder_centers.shape[1] == 0:
+                cylinder_centers = torch.zeros_like(cuboid_centers)
+                cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
+                cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
+                cylinder_quats = torch.zeros_like(cuboid_quats)
+            collision_loss = self.collision_loss(
+                y_hat,
+                cuboid_centers.reshape(-1, M, 3),
+                cuboid_dims.reshape(-1, M, 3),
+                cuboid_quats.reshape(-1, M, 4),
+                cylinder_centers.reshape(-1, M, 3),
+                cylinder_radii.reshape(-1, M, 1),
+                cylinder_heights.reshape(-1, M, 1),
+                cylinder_quats.reshape(-1, M, 4),
+                reduction="none"
+            ).sum(dim=1).reshape(-1, num_modes)
+            collision_loss = (collision_loss * weights.reshape(-1, num_modes)).sum(dim=1).mean()
+            predictions['collision_loss'] = collision_loss
+        else:
+            predictions['collision_loss'] = torch.tensor(0.0, device=self.device)
         return predictions
 
     def _compute_losses(self, predictions, batch):
@@ -923,13 +960,14 @@ class BC_RNN_GMM(BC_RNN):
         a_target = batch["actions"]
         actions = predictions["actions"]
         # loss is just negative log-likelihood of action targets
-        action_loss = -predictions["log_probs"].mean()
+        action_loss = -predictions["log_probs"].mean() + self.algo_config.loss.collision_weight * predictions['collision_loss']
         losses["l2_loss"] = nn.MSELoss()(actions, a_target)
         losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
         # cosine direction loss on eef delta position
         losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
         losses['log_probs'] = -action_loss
         losses['action_loss'] = action_loss
+        losses['collision_loss'] = predictions['collision_loss']
         return losses
 
     def log_info(self, info):
@@ -954,6 +992,8 @@ class BC_RNN_GMM(BC_RNN):
             log["L1_Loss"] = info["losses"]["l1_loss"].item()
         if "cos_loss" in info["losses"]:
             log["Cosine_Loss"] = info["losses"]["cos_loss"].item()
+        if "collision_loss" in info["losses"]:
+            log["Collision_Loss"] = info["losses"]["collision_loss"].item()
         return log
 
 

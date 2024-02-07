@@ -37,7 +37,8 @@
         "pcd_params": {
             "num_robot_points": 2048,
             "num_obstacle_points": 4096,
-            "target_pcd_type": "joint"
+            "target_pcd_type": "joint",
+            "noise_scale": 0.0
         }
     },
     "train": {
