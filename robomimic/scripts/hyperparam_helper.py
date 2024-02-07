@@ -63,12 +63,14 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
         name="ds",
         group=1,
         values=[
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_true.hdf5",
-            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5"
+            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_false.hdf5",
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_randomize_100K_pcd_params_obs_delta_false.hdf5",
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_randomize_joint_limits_100K_pcd_params_obs_delta_false.hdf5",
         ],
         value_names=[
-            "table_simple_100K_pcd_params_obs_delta_true",
-            # "table_1M_pcd_params_obs_delta_true"
+            # "table_simple",
+            "table_simple_randomize",
+            "table_simple_randomize_joint_limits",
         ]
     )
 
@@ -76,22 +78,24 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
        key="train.batch_size",
        name="bs", 
        group=2, 
-       values=[32],
     #    values=[128],
+       values=[64],
+    #    values=[16],
     )
 
     generator.add_param(
        key="algo.optim_params.policy.learning_rate.initial", 
        name="plr", 
        group=3, 
-       values=[1e-3, 5e-3], 
+       values=[1e-3], 
+    #    values=[1e-4], 
     )
 
     generator.add_param(
         key="observation.encoder.pcd.core_kwargs.backbone_kwargs.encoder_size", 
         name="size", 
         group=4, 
-        values=['medium', 'large'], 
+        values=['small', 'medium', 'large'], 
         # values=['small'], 
     )
 
