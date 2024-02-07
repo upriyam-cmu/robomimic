@@ -300,12 +300,15 @@ class BC_MpiNet(BC):
         curr_angles = batch['obs']['current_angles'] # this is normalized
         y_hat = torch.clamp(curr_angles + predictions['actions'], min=-1, max=1) # note this means we need to unnormalize the predictions in the env
         scene_pcd_params = batch["obs"]["saved_params"][:, 14:]
-        cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
+        cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, sphere_centers, sphere_radii, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
         if cylinder_centers.shape[1] == 0:
             cylinder_centers = torch.zeros_like(cuboid_centers)
             cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
             cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
             cylinder_quats = torch.zeros_like(cuboid_quats)
+        if sphere_centers.shape[1] == 0:
+            sphere_centers = torch.zeros_like(cuboid_centers)
+            sphere_radii = torch.zeros_like(cuboid_dims[..., 0:1])
         collision_loss, point_match_loss = self.loss_fun(
             y_hat,
             cuboid_centers.reshape(-1, M, 3),
@@ -315,6 +318,8 @@ class BC_MpiNet(BC):
             cylinder_radii.reshape(-1, M, 1),
             cylinder_heights.reshape(-1, M, 1),
             cylinder_quats.reshape(-1, M, 4),
+            sphere_centers.reshape(-1, M, 3),
+            sphere_radii.reshape(-1, M, 1),
             batch['actions'], # assume we are training with absolute actions
         )
         losses = OrderedDict()
@@ -767,12 +772,15 @@ class BC_RNN_MpiNet(BC_MpiNet):
         
         scene_pcd_params = batch["obs"]["saved_params"].reshape(-1, batch["obs"]["saved_params"].shape[-1])
         scene_pcd_params = scene_pcd_params[:, 14:]
-        cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
+        cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, sphere_centers, sphere_radii, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
         if cylinder_centers.shape[1] == 0:
             cylinder_centers = torch.zeros_like(cuboid_centers)
             cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
             cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
             cylinder_quats = torch.zeros_like(cuboid_quats)
+        if sphere_centers.shape[1] == 0:
+            sphere_centers = torch.zeros_like(cuboid_centers)
+            sphere_radii = torch.zeros_like(cuboid_dims[..., 0:1])
         collision_loss, point_match_loss = self.loss_fun(
             y_hat,
             cuboid_centers.reshape(-1, M, 3),
@@ -782,6 +790,8 @@ class BC_RNN_MpiNet(BC_MpiNet):
             cylinder_radii.reshape(-1, M, 1),
             cylinder_heights.reshape(-1, M, 1),
             cylinder_quats.reshape(-1, M, 4),
+            sphere_centers.reshape(-1, M, 3),
+            sphere_radii.reshape(-1, M, 1),
             gt_actions
         )
         losses = OrderedDict()
@@ -920,12 +930,15 @@ class BC_RNN_GMM(BC_RNN):
             
             scene_pcd_params = batch["obs"]["saved_params"].unsqueeze(2).repeat(1, 1, num_modes, 1).reshape(-1, batch["obs"]["saved_params"].shape[-1])
             scene_pcd_params = scene_pcd_params[:, 14:]
-            cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
+            cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, sphere_centers, sphere_radii, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
             if cylinder_centers.shape[1] == 0:
                 cylinder_centers = torch.zeros_like(cuboid_centers)
                 cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
                 cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
                 cylinder_quats = torch.zeros_like(cuboid_quats)
+            if sphere_centers.shape[1] == 0:
+                sphere_centers = torch.zeros_like(cuboid_centers)
+                sphere_radii = torch.zeros_like(cuboid_dims[..., 0:1])
             collision_loss = self.collision_loss(
                 y_hat,
                 cuboid_centers.reshape(-1, M, 3),
@@ -935,6 +948,8 @@ class BC_RNN_GMM(BC_RNN):
                 cylinder_radii.reshape(-1, M, 1),
                 cylinder_heights.reshape(-1, M, 1),
                 cylinder_quats.reshape(-1, M, 4),
+                sphere_centers.reshape(-1, M, 3),
+                sphere_radii.reshape(-1, M, 1),
                 reduction="none"
             ).sum(dim=1).reshape(-1, num_modes)
             collision_loss = (collision_loss * weights.reshape(-1, num_modes)).sum(dim=1).mean()
