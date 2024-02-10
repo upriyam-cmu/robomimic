@@ -148,7 +148,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         )
     # restore policy
     if ckpt_path is not None and ckpt_path != 'None':
-        model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True, ddp=ddp, rank=rank, world_size=world_size)
+        model, _ = FileUtils.model_from_checkpoint(ckpt_path=ckpt_path, device=device, verbose=True, ddp=ddp, rank=rank, world_size=world_size, config=config)
     else:
         model = algo_factory(
             algo_name=config.algo_name,
@@ -477,8 +477,17 @@ def main(rank, args):
 
     if ckpt_path is not None and ckpt_path != 'None':
         ckpt_dict = FileUtils.load_dict_from_checkpoint(ckpt_path=ckpt_path)
-        config, _ = FileUtils.config_from_checkpoint(ckpt_dict=ckpt_dict)
-        config.unlock()
+        if args.start_from_checkpoint:
+            # if starting from checkpoint, use input config to override the checkpoint config
+            ext_cfg = json.load(open(args.config, 'r'))
+            config = config_factory(ext_cfg["algo_name"])
+            # update config with external json - this will throw errors if
+            # the external config has keys not present in the base algo config
+            with config.values_unlocked():
+                config.update(ext_cfg)
+        else:
+            config, _ = FileUtils.config_from_checkpoint(ckpt_dict=ckpt_dict)
+            config.unlock()
     elif args.config is not None:
         ext_cfg = json.load(open(args.config, 'r'))
         config = config_factory(ext_cfg["algo_name"])

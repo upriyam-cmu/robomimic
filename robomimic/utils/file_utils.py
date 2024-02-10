@@ -348,7 +348,7 @@ def config_from_checkpoint(algo_name=None, ckpt_path=None, ckpt_dict=None, verbo
 
     return config, ckpt_dict
 
-def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=False, ddp=False, rank=0, world_size=1):
+def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=False, ddp=False, rank=0, world_size=1, config=None):
     """
     This function restores a trained model from a checkpoint file or
     loaded model dictionary.
@@ -372,9 +372,10 @@ def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=F
     """
     ckpt_dict = maybe_dict_from_checkpoint(ckpt_path=ckpt_path, ckpt_dict=ckpt_dict)
 
-    # algo name and config from model dict
-    algo_name, _ = algo_name_from_checkpoint(ckpt_dict=ckpt_dict)
-    config, _ = config_from_checkpoint(algo_name=algo_name, ckpt_dict=ckpt_dict, verbose=verbose)
+    if config is None:
+        # algo name and config from model dict
+        algo_name, _ = algo_name_from_checkpoint(ckpt_dict=ckpt_dict)
+        config, _ = config_from_checkpoint(algo_name=algo_name, ckpt_dict=ckpt_dict, verbose=verbose)
 
     # read config to set up metadata for observation modalities (e.g. detecting rgb observations)
     ObsUtils.initialize_obs_utils_with_config(config)
@@ -396,7 +397,7 @@ def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=F
 
     # create model and load weights
     model = algo_factory(
-        algo_name,
+        config.algo_name,
         config,
         obs_key_shapes=shape_meta["all_shapes"],
         ac_dim=shape_meta["ac_dim"],
