@@ -921,13 +921,14 @@ class BC_RNN_GMM(BC_RNN):
         )
         
         if self.algo_config.loss.collision_weight > 0:
-            curr_angles = batch['obs']['current_angles'] # this is normalized
+            curr_angles = batch['obs']['current_angles']
             # compute overall mean of gmm:
             means = dists.mean
             curr_angles = curr_angles.reshape(-1, curr_angles.shape[-1])
             act_pred = means.reshape(-1, means.shape[-1])
+            # assumption is that curr_angles is not normalized
             y_hat = torch.clamp(curr_angles + act_pred, min=FRANKA_LOWER_LIMITS, max=FRANKA_UPPER_LIMITS)
-            y_hat = franka_utils.normalize_franka_joints(y_hat) # assumption is that curr_angles is not normalized
+            y_hat = franka_utils.normalize_franka_joints(y_hat) 
             
             scene_pcd_params = batch["obs"]["saved_params"].reshape(-1, batch["obs"]["saved_params"].shape[-1])
             scene_pcd_params = scene_pcd_params[:, 14:]
