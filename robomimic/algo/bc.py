@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torch.distributions as D
 from neural_mp.envs.franka_pybullet_env import decompose_scene_pcd_params_obs_batched
 from neural_mp import franka_utils
+from neural_mp.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
 
 import robomimic.models.base_nets as BaseNets
 import robomimic.models.obs_nets as ObsNets
@@ -22,6 +23,9 @@ import robomimic.utils.obs_utils as ObsUtils
 from robomimic.algo import register_algo_factory_func, PolicyAlgo
 import neural_mp.mpinets_loss as loss
 
+# convert limits to torch.Tensor
+FRANKA_LOWER_LIMITS = torch.tensor(FRANKA_LOWER_LIMITS, dtype=torch.float32).cuda()
+FRANKA_UPPER_LIMITS = torch.tensor(FRANKA_UPPER_LIMITS, dtype=torch.float32).cuda()
 @register_algo_factory_func("bc")
 def algo_config_to_class(algo_config):
     """
@@ -918,27 +922,16 @@ class BC_RNN_GMM(BC_RNN):
         
         if self.algo_config.loss.collision_weight > 0:
             curr_angles = batch['obs']['current_angles'] # this is normalized
-            # reshape seq dim to batch dim
-            weights = dists.mixture_distribution.logits.exp() # B, T, num_modes
-            B, T, num_modes = weights.shape
-            means = dists.component_distribution.mean # B, T, num_modes, action_dim
-            
-            # act_pred = predictions['actions'].reshape(-1, predictions['actions'].shape[-1])
-            curr_angles = curr_angles.unsqueeze(2).repeat(1, 1, num_modes, 1).reshape(-1, curr_angles.shape[-1])
+            # compute overall mean of gmm:
+            means = dists.mean
+            curr_angles = curr_angles.reshape(-1, curr_angles.shape[-1])
             act_pred = means.reshape(-1, means.shape[-1])
-            y_hat = torch.clamp(curr_angles + act_pred, min=-1, max=1) # note this means we need to unnormalize the predictions in the env
+            y_hat = torch.clamp(curr_angles + act_pred, min=FRANKA_LOWER_LIMITS, max=FRANKA_UPPER_LIMITS)
+            y_hat = franka_utils.normalize_franka_joints(y_hat) # assumption is that curr_angles is not normalized
             
-            scene_pcd_params = batch["obs"]["saved_params"].unsqueeze(2).repeat(1, 1, num_modes, 1).reshape(-1, batch["obs"]["saved_params"].shape[-1])
+            scene_pcd_params = batch["obs"]["saved_params"].reshape(-1, batch["obs"]["saved_params"].shape[-1])
             scene_pcd_params = scene_pcd_params[:, 14:]
             cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, sphere_centers, sphere_radii, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
-            if cylinder_centers.shape[1] == 0:
-                cylinder_centers = torch.zeros_like(cuboid_centers)
-                cylinder_radii = torch.zeros_like(cuboid_dims[..., 0:1])
-                cylinder_heights = torch.zeros_like(cuboid_dims[..., 0:1])
-                cylinder_quats = torch.zeros_like(cuboid_quats)
-            if sphere_centers.shape[1] == 0:
-                sphere_centers = torch.zeros_like(cuboid_centers)
-                sphere_radii = torch.zeros_like(cuboid_dims[..., 0:1])
             collision_loss = self.collision_loss(
                 y_hat,
                 cuboid_centers.reshape(-1, M, 3),
@@ -950,9 +943,8 @@ class BC_RNN_GMM(BC_RNN):
                 cylinder_quats.reshape(-1, M, 4),
                 sphere_centers.reshape(-1, M, 3),
                 sphere_radii.reshape(-1, M, 1),
-                reduction="none"
-            ).sum(dim=1).reshape(-1, num_modes)
-            collision_loss = (collision_loss * weights.reshape(-1, num_modes)).sum(dim=1).mean()
+                reduction="mean"
+            ) 
             predictions['collision_loss'] = collision_loss
         else:
             predictions['collision_loss'] = torch.tensor(0.0, device=self.device)
