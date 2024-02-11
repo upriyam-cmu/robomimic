@@ -99,8 +99,30 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
         key="algo.loss.collision_weight",
         name="cw",
         group=5,
-        values=[0.0, 1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7],
+        # values=[1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7],
+        values=[0.0, 1.0, 1e1, 1e2],
     )
+    
+    generator.add_param(
+        key="algo.loss.collision_loss_params.hinge_loss",
+        name="",
+        group=4,
+        values=[False],
+    )
+    
+    generator.add_param(
+        key="algo.loss.collision_loss_params.reduction",
+        name="red",
+        group=6,
+        values=["mean", "sum", "max"],
+    )
+    
+    # generator.add_param(
+    #     key="algo.loss.collision_loss_params.margin",
+    #     name="marg",
+    #     group=7,
+    #     values=[0, .01, .03, .05],
+    # )
     
     #generator.add_param(
     #    key="train.seq_length", 
