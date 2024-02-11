@@ -60,45 +60,48 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
 
     generator.add_param(
         key="train.data",
-        name="ds",
+        name="",
         group=1,
         values=[
-            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_100K_pcd_params_obs_delta_false.hdf5",
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_randomize_100K_pcd_params_obs_delta_false.hdf5",
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_simple_randomize_joint_limits_100K_pcd_params_obs_delta_false.hdf5",
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5",
         ],
         value_names=[
-            # "table_simple",
-            "table_simple_randomize",
-            "table_simple_randomize_joint_limits",
+            "table_1M_pcd_params_obs_delta_true",
         ]
     )
 
-    generator.add_param(
-       key="train.batch_size",
-       name="bs", 
-       group=2, 
-    #    values=[128],
-       values=[64],
-    #    values=[16],
-    )
+    # generator.add_param(
+    #    key="train.batch_size",
+    #    name="bs", 
+    #    group=2, 
+    # #    values=[128],
+    #    values=[64],
+    # #    values=[16],
+    # )
 
-    generator.add_param(
-       key="algo.optim_params.policy.learning_rate.initial", 
-       name="plr", 
-       group=3, 
-       values=[1e-3], 
-    #    values=[1e-4], 
-    )
+    # generator.add_param(
+    #    key="algo.optim_params.policy.learning_rate.initial", 
+    #    name="plr", 
+    #    group=3, 
+    #    values=[1e-3], 
+    # #    values=[1e-4], 
+    # )
 
+    # generator.add_param(
+    #     key="observation.encoder.pcd.core_kwargs.backbone_kwargs.encoder_size", 
+    #     name="size", 
+    #     group=4, 
+    #     values=['small', 'medium', 'large'], 
+    #     # values=['small'], 
+    # )
+    
     generator.add_param(
-        key="observation.encoder.pcd.core_kwargs.backbone_kwargs.encoder_size", 
-        name="size", 
-        group=4, 
-        values=['small', 'medium', 'large'], 
-        # values=['small'], 
+        key="algo.loss.collision_weight",
+        name="cw",
+        group=5,
+        values=[0.0, 1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7],
     )
-
+    
     #generator.add_param(
     #    key="train.seq_length", 
     #    name="sl", 

@@ -45,12 +45,12 @@ slurm_additional_parameters = {
     "partition": "all",
     "time": "06:00:00",
     "gpus": 1,
-    # "cpus_per_gpu": 8,
-    "cpus_per_gpu": 16,
-    # "mem": 62,
-    "mem": 100,
-    "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
-    # "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
+    "cpus_per_gpu": 8,
+    # "cpus_per_gpu": 16,
+    "mem": 62,
+    # "mem": 100,
+    # "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
+    "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
     # "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29, grogu-1-3, grogu-0-19, grogu-1-40", # 2080, 3080
 }
 
