@@ -114,3 +114,6 @@ class BCConfig(BaseConfig):
         self.algo.mpinets.enabled = False
         self.algo.loss.collision_weight = 0.0
         self.algo.loss.point_match_weight = 0.0
+        self.algo.loss.collision_loss_params.margin = 0.03
+        self.algo.loss.collision_loss_params.hinge_loss = True
+        self.algo.loss.collision_loss_params.reduction = "mean"

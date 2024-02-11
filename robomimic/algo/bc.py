@@ -944,7 +944,9 @@ class BC_RNN_GMM(BC_RNN):
                 cylinder_quats.reshape(-1, M, 4),
                 sphere_centers.reshape(-1, M, 3),
                 sphere_radii.reshape(-1, M, 1),
-                reduction="mean"
+                reduction=self.algo_config.loss.collision_loss_params['reduction'],
+                hinge_loss=self.algo_config.loss.collision_loss_params['hinge_loss'],
+                margin=self.algo_config.loss.collision_loss_params['margin'],
             ) 
             predictions['collision_loss'] = collision_loss
         else:
