@@ -50,10 +50,10 @@ def create_hdf5_filter_key(hdf5_path, demo_keys, key_name):
 
     # collect episode lengths for the keys of interest
     ep_lengths = []
-    for ep in demos:
-        ep_data_grp = f["data/{}".format(ep)]
-        if ep in demo_keys:
-            ep_lengths.append(ep_data_grp.attrs["num_samples"])
+    # for ep in tqdm(demos):
+    #     ep_data_grp = f["data/{}".format(ep)]
+    #     if ep in demo_keys:
+    #         ep_lengths.append(ep_data_grp.attrs["num_samples"])
 
     # store list of filtered keys under mask group
     k = "mask/{}".format(key_name)

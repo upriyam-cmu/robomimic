@@ -26,6 +26,7 @@ import h5py
 import json
 import argparse
 import numpy as np
+from tqdm import tqdm
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -75,7 +76,7 @@ if __name__ == "__main__":
     traj_lengths = []
     action_min = np.inf
     action_max = -np.inf
-    for ep in demos:
+    for ep in tqdm(demos):
         traj_lengths.append(f["data/{}/actions".format(ep)].shape[0])
         action_min = min(action_min, np.min(f["data/{}/actions".format(ep)][()]))
         action_max = max(action_max, np.max(f["data/{}/actions".format(ep)][()]))
