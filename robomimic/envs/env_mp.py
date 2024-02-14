@@ -4,8 +4,10 @@ to provide a standardized environment API for training policies and interacting
 with metadata present in datasets.
 """
 from collections import OrderedDict
+import gym
 import json
 from copy import deepcopy
+import gymnasium
 
 from omegaconf import DictConfig, OmegaConf
 from neural_mp.franka_utils import normalize_franka_joints
@@ -36,7 +38,7 @@ from pytorch3d.renderer import (
 from neural_mp.envs.franka_pybullet_env import depth_to_rgb, compute_full_pcd
 
 
-class EnvMP(EB.EnvBase):
+class EnvMP(EB.EnvBase, gymnasium.Env):
     """Wrapper class for motion planning envs"""
     def __init__(
         self,
@@ -77,6 +79,15 @@ class EnvMP(EB.EnvBase):
         self.postprocesss_visual_obs = postprocess_visual_obs
         self.mpinets_enabled = mpinets_enabled
         self.env = eval(env_name)(cfg)
+        # build observation space from the observation dictionary
+        obs = self.get_observation()
+        self.observation_space = gymnasium.spaces.Dict(
+            {k: gymnasium.spaces.Box(low=-np.inf, high=np.inf, shape=v.shape, dtype=v.dtype) for k, v in obs.items()}
+        )
+        # build action space from the action dictionary
+        self.action_space = gymnasium.spaces.Box(
+            low=-1*np.ones(7), high=np.ones(7), dtype=np.float32
+        )
 
     def step(self, action):
         """
@@ -95,19 +106,26 @@ class EnvMP(EB.EnvBase):
         self._current_obs = obs
         self._current_reward = reward
         self._current_done = done
-        return self.get_observation(obs), reward, self.is_done(), info
+        done = self.is_done()
+        trunc = self.is_done() # this is ignored but necessary for gymanasium compatibility
+        return self.get_observation(obs), reward, self.is_done(), trunc, info
 
-    def reset(self):
+    def reset(self, seed=None):
         """
         Reset environment.
 
         Returns:
             observation (dict): initial observation dictionary.
         """
+        # set seed
+        if seed is None:
+            seed = np.random.randint(0, 10000000)
+        np.random.seed(seed)
         self._current_obs = self.env.reset()
         self._current_reward = None
         self._current_done = self.is_success()
-        return self.get_observation(self._current_obs)
+        reset_infos = {} # this is ignored but necessary for gymanasium compatibility
+        return self.get_observation(self._current_obs), reset_infos
 
     def reset_to(self, state):
         """
@@ -123,7 +141,7 @@ class EnvMP(EB.EnvBase):
         self.env.set_state(state["states"])
         return self.get_observation(self.env.get_observation())
 
-    def render(self, mode="human", height=None, width=None, camera_name=None, **kwargs):
+    def render(self, mode="rgb_array", height=512, width=512, camera_name=None, **kwargs):
         """
         Render from simulation to either an on-screen window or off-screen to RGB array.
 
@@ -134,7 +152,7 @@ class EnvMP(EB.EnvBase):
         """
         if mode =="human":
             return self.env.render(mode=mode, **kwargs)
-        if mode == "rgb_array":
+        if mode == "rgb_array" or mode is None:
             return self.env.get_alpha_blended_target_img(
                         self.env.goal_mask, self.env.goal_img
                     )[:, :, ::-1]

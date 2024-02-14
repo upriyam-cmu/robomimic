@@ -3,6 +3,7 @@ This file contains several utility functions used to define the main training lo
 mainly consists of functions to assist with logging, rollouts, and the @run_epoch function,
 which is the core training logic for models in this repository.
 """
+import traceback
 import os
 import time
 import datetime
@@ -203,10 +204,10 @@ def run_rollout(
         results (dict): dictionary containing return, success rate, etc.
     """
     assert isinstance(policy, RolloutPolicy)
-    assert isinstance(env, EnvBase) or isinstance(env, EnvWrapper)
 
     policy.start_episode()
 
+    env.seed(np.random.randint(0, 1000000))
     ob_dict = env.reset()
     goal_dict = None
     if use_goals:
@@ -217,17 +218,16 @@ def run_rollout(
     video_count = 0  # video frame counter
 
     total_reward = 0.
-    success = { k: False for k in env.is_success() } # success metrics
-
+    success = env.env_method("is_success")
+    success = [{k: False for k in s} for s in success]  # success metrics
+    video_images = []
+    
     try:
         for step_i in range(horizon):
-
             # get action from policy
             ac = policy(ob=ob_dict, goal=goal_dict)
-
             # play action
             ob_dict, r, done, info = env.step(ac)
-
             # render to screen
             if render:
                 env.render(mode="human")
@@ -235,35 +235,48 @@ def run_rollout(
             # compute reward
             total_reward += r
 
-            cur_success_metrics = env.is_success()
-            for k in success:
-                success[k] = success[k] or cur_success_metrics[k]
+            cur_success_metrics = env.env_method("is_success")
+            cur_success_metrics = [{k: bool(s[k]) for k in s} for s in cur_success_metrics]
+            for s, curr_s in zip(success, cur_success_metrics):
+                for k in s:
+                    s[k] = s[k] or curr_s[k]
 
             # visualization
             if video_writer is not None:
                 if video_count % video_skip == 0:
-                    video_img = env.render(mode="rgb_array", height=512, width=512)
-                    video_writer.append_data(video_img)
-
+                    ims = env.env_method("render")
+                    video_images.append(ims)
                 video_count += 1
-
             # break if done
-            if done or (terminate_on_success and success["task"]):
+            if all(done) or (terminate_on_success and all([s["task"] for s in success])):
                 break
+    except:
+        print(traceback.format_exc())
+        print("WARNING: got rollout exception")
 
-    except env.rollout_exceptions as e:
-        print("WARNING: got rollout exception {}".format(e))
 
-    results["Return"] = total_reward
+    # combine the videos into one sequential video
+    if video_writer is not None:
+        for env_idx in range(len(video_images[0])):
+            for ims in video_images:
+                video_writer.append_data(ims[env_idx])
+    
+    results["Return"] = 0.0 # NOTE: env returns 0 anyways, but this is causing issues for some reason
     results["Horizon"] = step_i + 1
-    results["Success_Rate"] = float(success["task"])
-    results.update(info)
+    results["Success_Rate"] = np.mean([float(s["task"]) for s in success])
+    print("Success Rate: ", results["Success_Rate"])
 
+    # convert info from list of dicts to dict of lists
+    new_info = {}
+    for k in info[0]:
+        if k != "TimeLimit.truncated":
+            new_info[k] = np.mean([info[i][k] for i in range(len(info))])
+    results.update(new_info)
+    
     # log additional success metrics
-    for k in success:
+    for k in success[0]:
         if k != "task":
-            results["{}_Success_Rate".format(k)] = float(success[k])
-
+            results["{}_Success".format(k)] = np.mean([float(s[k]) for s in success])
     return results
 
 
@@ -347,7 +360,7 @@ def rollout_with_stats(
             env_video_writer = video_writers[env_name]
 
         print("rollout: env={}, horizon={}, use_goals={}, num_episodes={}".format(
-            env.name, horizon, use_goals, num_episodes,
+            env_name, horizon, use_goals, num_episodes,
         ))
         rollout_logs = []
         iterator = range(num_episodes)
