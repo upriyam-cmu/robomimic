@@ -60,12 +60,10 @@ import json
 import h5py
 import argparse
 import imageio
-from matplotlib import pyplot as plt
 import numpy as np
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 
-import robomimic
-from robomimic.envs.env_mp import render_pointcloud, render_single_pointcloud
+from robomimic.envs.env_mp import render_pointcloud
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.file_utils as FileUtils
@@ -125,7 +123,6 @@ def playback_trajectory_with_env(
     action_playback = (actions is not None)
     if action_playback:
         traj_len -= 1
-    #     assert states.shape[0] == actions.shape[0], (states.shape, actions.shape)
 
     for i in range(traj_len):
         if action_playback:
@@ -158,8 +155,6 @@ def playback_trajectory_with_env(
 
         if first:
             break
-    # print("Success: ", json.dumps(env.is_success(), indent=4))
-    # print(json.dumps(env.env.get_info(), indent=4))
     combined_dict = {**env.is_success(), **env.env.get_info()}
     return combined_dict
 
@@ -245,10 +240,9 @@ def playback_dataset(args):
         )
         ObsUtils.initialize_obs_utils_with_obs_specs(obs_modality_specs=dummy_spec)
         env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path=args.dataset)
-        # env_meta['env_kwargs']['cfg']['task']['mp_kwargs']['set_intermediate_states'] = False
-        # env_meta['env_kwargs']['cfg']['task']['mp_kwargs']['num_execution_steps_per_waypoint'] = 100
         env_meta['env_kwargs']['cfg']['task']['include_mpi_nets_info_in_logs'] = True
-        env = EnvUtils.create_env_from_metadata(env_meta=env_meta, render=args.render, render_offscreen=write_video, pcd_params=dict(num_robot_points=128, num_obstacle_points=4096))
+        pcd_params = dict(num_robot_points=128, num_obstacle_points=4096)
+        env = EnvUtils.create_env_from_metadata(env_meta=env_meta, render=args.render, render_offscreen=write_video, pcd_params=pcd_params)
 
         # some operations for playback are robosuite-specific, so determine if this environment is a robosuite env
         is_robosuite_env = EnvUtils.is_robosuite_env(env_meta)
