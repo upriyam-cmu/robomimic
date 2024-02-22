@@ -17,8 +17,8 @@ from tqdm import tqdm
 
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 from neural_mp.envs.franka_pybullet_env import depth_to_rgb
-from neural_mp.franka_utils import normalize_franka_joints
-from neural_mp.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
+from neural_mp.utils.franka_utils import normalize_franka_joints
+from neural_mp.utils.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
 
 
 class SequenceDataset(torch.utils.data.Dataset):

@@ -10,7 +10,7 @@ from copy import deepcopy
 import gymnasium
 
 from omegaconf import DictConfig, OmegaConf
-from neural_mp.franka_utils import normalize_franka_joints
+from neural_mp.utils.franka_utils import normalize_franka_joints
 import robomimic.envs.env_base as EB
 import robomimic.utils.obs_utils as ObsUtils
 from neural_mp.envs import *

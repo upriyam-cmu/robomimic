@@ -8,8 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
 from neural_mp.envs.franka_pybullet_env import decompose_scene_pcd_params_obs_batched
-from neural_mp import franka_utils
-from neural_mp.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
+from neural_mp.utils import franka_utils
+from neural_mp.utils.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
 
 import robomimic.models.base_nets as BaseNets
 import robomimic.models.obs_nets as ObsNets
@@ -21,7 +21,7 @@ import robomimic.utils.torch_utils as TorchUtils
 import robomimic.utils.obs_utils as ObsUtils
 
 from robomimic.algo import register_algo_factory_func, PolicyAlgo
-import neural_mp.mpinets_loss as loss
+import neural_mp.utils.mpinets_loss as loss
 
 # convert limits to torch.Tensor
 FRANKA_LOWER_LIMITS = torch.tensor(FRANKA_LOWER_LIMITS, dtype=torch.float32).cuda()
