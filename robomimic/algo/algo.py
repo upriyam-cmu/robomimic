@@ -512,7 +512,11 @@ class RolloutPolicy(object):
                 and np.array values for each key)
         """
         ob = TensorUtils.to_tensor(ob)
-        ob = TensorUtils.to_batch(ob)
+        # if ob is not a batch, make it a batch
+        # get first key of ob
+        k = [k for k in ob.keys()][0]
+        if len(ob[k].shape) == 1:
+            ob = TensorUtils.to_batch(ob)
         ob = TensorUtils.to_device(ob, self.policy.device)
         ob = TensorUtils.to_float(ob)
         if self.obs_normalization_stats is not None:
@@ -536,8 +540,14 @@ class RolloutPolicy(object):
                 and np.array values for each key)
             goal (dict): goal observation
         """
+        # get first key of ob
+        k = [k for k in ob.keys()][0]
+        squeeze_action = len(ob[k].shape) == 1
         ob = self._prepare_observation(ob)
         if goal is not None:
             goal = self._prepare_observation(goal)
         ac = self.policy.get_action(obs_dict=ob, goal_dict=goal)
-        return TensorUtils.to_numpy(ac[0])
+        if squeeze_action:
+            return TensorUtils.to_numpy(ac[0])
+        else:
+            return TensorUtils.to_numpy(ac)

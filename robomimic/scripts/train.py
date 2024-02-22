@@ -45,6 +45,18 @@ from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
 import torch.multiprocessing as mp
 import torch.distributed as dist
 import torch.nn as nn
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+
+def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled):
+    env = EnvUtils.create_env_from_metadata(
+        env_meta=env_meta,
+        render=False, 
+        render_offscreen=render_video,
+        use_image_obs=use_images,
+        pcd_params=pcd_params,
+        mpinets_enabled=mpinets_enabled,
+    )
+    return env
 
 def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False, rank=0, world_size=1, ddp=False):
     """
@@ -123,18 +135,22 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     env_names.append(name)
 
             for env_name in env_names:
-                env = EnvUtils.create_env_from_metadata(
-                    env_meta=env_meta,
-                    env_name=env_name, 
-                    render=False, 
-                    render_offscreen=config.experiment.render_video,
-                    use_image_obs=shape_meta["use_images"],
-                    pcd_params=config.experiment.pcd_params,
-                    mpinets_enabled=config.algo.mpinets.enabled,
-                )
-                env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
-                envs[env.name] = env
-                print(envs[env.name])
+                pcd_params = config.experiment.pcd_params.to_dict()
+                mpinets_enabled = config.algo.mpinets.enabled
+                render_video = config.experiment.render_video
+                if config.experiment.num_envs > 1:
+                    env = SubprocVecEnv(
+                        [
+                            lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled)
+                            for _ in range(10)
+                        ],
+                        start_method='fork' #isnt threadsafe but only version that runs at reasonable speeds
+                    )
+                else:
+                    env = DummyVecEnv([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled)])
+
+                envs[env_name] = env
+                print(envs[env_name])
 
     print("")
 

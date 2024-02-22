@@ -17,8 +17,8 @@ from tqdm import tqdm
 
 from neural_mp.envs.franka_pybullet_env import compute_full_pcd
 from neural_mp.envs.franka_pybullet_env import depth_to_rgb
-from neural_mp.franka_utils import normalize_franka_joints
-from neural_mp.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
+from neural_mp.utils.franka_utils import normalize_franka_joints
+from neural_mp.utils.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -93,6 +93,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         self.hdf5_use_swmr = hdf5_use_swmr
         self.hdf5_normalize_obs = hdf5_normalize_obs
         self._hdf5_file = None
+        self.pcd_params = pcd_params
 
         assert hdf5_cache_mode in ["all", "low_dim", None]
         self.hdf5_cache_mode = hdf5_cache_mode
@@ -158,7 +159,6 @@ class SequenceDataset(torch.utils.data.Dataset):
         else:
             self.hdf5_cache = None
         self.close_and_delete_hdf5_handle()
-        self.pcd_params = pcd_params
 
     def load_demo_info(self, filter_by_attribute=None, demos=None):
         """

@@ -12,7 +12,6 @@ from collections import OrderedDict
 from tqdm import tqdm
 
 import torch
-from robomimic.models.base_nets import DDPModelWrapper
 
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.env_utils as EnvUtils
@@ -370,6 +369,8 @@ def model_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=F
         ckpt_dict (dict): loaded checkpoint dictionary (convenient to avoid
             re-loading checkpoint from disk multiple times)
     """
+    from robomimic.models.base_nets import DDPModelWrapper
+    
     ckpt_dict = maybe_dict_from_checkpoint(ckpt_path=ckpt_path, ckpt_dict=ckpt_dict)
 
     if config is None:
@@ -436,6 +437,7 @@ def policy_from_checkpoint(device=None, ckpt_path=None, ckpt_dict=None, verbose=
         ckpt_dict (dict): loaded checkpoint dictionary (convenient to avoid
             re-loading checkpoint from disk multiple times)
     """
+    from robomimic.models.base_nets import DDPModelWrapper
     ckpt_dict = maybe_dict_from_checkpoint(ckpt_path=ckpt_path, ckpt_dict=ckpt_dict)
 
     # algo name and config from model dict

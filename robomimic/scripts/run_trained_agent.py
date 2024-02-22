@@ -62,8 +62,8 @@ from copy import deepcopy
 import torch
 from tqdm import tqdm
 from neural_mp.envs.franka_pybullet_env import decompose_scene_pcd_params_obs_batched
-from neural_mp.franka_utils import normalize_franka_joints
-from neural_mp.mpinets_loss import CollisionAndBCLossContainer
+from neural_mp.utils.franka_utils import normalize_franka_joints
+from neural_mp.utils.mpinets_loss import CollisionAndBCLossContainer
 
 import robomimic
 import robomimic.utils.file_utils as FileUtils
@@ -101,7 +101,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
     assert not (render and (video_writer is not None))
 
     policy.start_episode()
-    obs = env.reset()
+    obs, _ = env.reset()
     state_dict = env.get_state()
 
     # hack that is necessary for robosuite tasks for deterministic action playback
@@ -122,7 +122,7 @@ def rollout(policy, env, horizon, render=False, video_writer=None, video_skip=5,
             act = policy(ob=obs)
             
             # play action
-            next_obs, r, done, info = env.step(act)
+            next_obs, r, done, trunc, info = env.step(act)
             
             # compute reward
             total_reward += r
@@ -224,9 +224,8 @@ def run_trained_agent(args):
         config, _ = FileUtils.config_from_checkpoint(ckpt_dict=ckpt_dict)
         rollout_horizon = config.experiment.rollout.horizon
 
+    ckpt_dict['env_metadata']['env_kwargs']['cfg']['task']['include_mpi_nets_info_in_logs'] = True
     # create environment from saved checkpoint
-    # ckpt_dict['env_metadata']['env_kwargs']['cfg']['task']['mp_kwargs']['set_intermediate_states'] = False
-    # ckpt_dict['env_metadata']['env_kwargs']['cfg']['task']['mp_kwargs']['num_execution_steps_per_waypoint'] = 10
     env, _ = FileUtils.env_from_checkpoint(
         ckpt_dict=ckpt_dict, 
         env_name=args.env, 
