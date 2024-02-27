@@ -930,7 +930,7 @@ class BC_RNN_GMM(BC_RNN):
             scene_pcd_params = batch["obs"]["saved_params"].reshape(-1, batch["obs"]["saved_params"].shape[-1])
             scene_pcd_params = scene_pcd_params[:, 14:]
             cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, sphere_centers, sphere_radii, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
-            collision_loss = self.collision_loss(
+            collision_loss, sdf_collisions = self.collision_loss(
                 y_hat,
                 cuboid_centers.reshape(-1, M, 3),
                 cuboid_dims.reshape(-1, M, 3),
@@ -948,6 +948,7 @@ class BC_RNN_GMM(BC_RNN):
                 compute_loss_on_penetrations_only=self.algo_config.loss.collision_loss_params['compute_loss_on_penetrations_only'],
             ) 
             predictions['collision_loss'] = collision_loss
+            predictions['sdf_collision_rate'] = sdf_collisions.mean()
         else:
             predictions['collision_loss'] = torch.tensor(0.0, device=self.device)
         return predictions
@@ -977,6 +978,7 @@ class BC_RNN_GMM(BC_RNN):
         losses['log_probs'] = -action_loss
         losses['action_loss'] = action_loss
         losses['collision_loss'] = predictions['collision_loss']
+        losses['sdf_collision_rate'] = predictions['sdf_collision_rate']
         return losses
 
     def log_info(self, info):
@@ -1003,6 +1005,8 @@ class BC_RNN_GMM(BC_RNN):
             log["Cosine_Loss"] = info["losses"]["cos_loss"].item()
         if "collision_loss" in info["losses"]:
             log["Collision_Loss"] = info["losses"]["collision_loss"].item()
+        if "sdf_collision_rate" in info["losses"]:
+            log["SDF_Collision_Rate"] = info["losses"]["sdf_collision_rate"].item()
         return log
 
 

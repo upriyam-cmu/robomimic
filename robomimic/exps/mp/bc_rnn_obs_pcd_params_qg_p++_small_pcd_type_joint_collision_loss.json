@@ -83,8 +83,13 @@
             "l2_weight": 1.0,
             "l1_weight": 0.0,
             "cos_weight": 0.0,
-            "collision_weight": 100000.0,
-	    "collision_loss_params":{}
+            "collision_weight": 1000.0,
+	    "collision_loss_params":{
+            "hinge_loss": false,
+            "compute_loss_on_penetrations_only": true,
+            "smooth_sdf_loss": "none",
+            "reduction": "mean"
+        }
         },
         "actor_layer_dims": [],
         "gaussian": {
