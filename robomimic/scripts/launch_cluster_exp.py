@@ -40,28 +40,33 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
     base_output_dir = os.path.join(base_output_dir, config.experiment.name, time_str)
     return base_output_dir
 
-
 slurm_additional_parameters = {
-    "partition": "all",
-    "time": "06:00:00",
-    "gpus": 1,
-    "cpus_per_gpu": 8,
-    # "cpus_per_gpu": 16,
-    "mem": 62,
-    # "mem": 100,
-    # "exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
-    "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
-    # "exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29, grogu-1-3, grogu-0-19, grogu-1-40", # 2080, 3080
+    "name": "",
+    "slurm_partition": "all",
+    "timeout_min": 60 * 6,
+    "mem_gb": 62,
+    "nodes": 1,
+    "cpus_per_task": 8,
+    "slurm_gres": "gpu:1",
+    "tasks_per_node": 1,
+    "slurm_signal_delay_s": 120,
+    # "slurm_exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
+    "slurm_exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
+    # "slurm_exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29, grogu-1-3, grogu-0-19, grogu-1-40", # 2080, 3080
 }
 
 # slurm_additional_parameters = {
-#     "partition": "russ_reserved",
-#     "time": "3-00:00:00",
-#     "gpus": 1,
-#     "cpus_per_gpu": 20,
-#     "mem": 62,
-#     # "exclude": "matrix-1-[4,6,8,10,12,16,18,20],matrix-0-[24,34,38]", # Throw out non-rtx
-#     "exclude": "matrix-1-[12,16,18],matrix-0-[24,34,38]", # Throw out non-rtx
+#     "name": "",
+#     "slurm_partition": "russ_reserved",
+#     "timeout_min": 72*60,
+#     "mem_gb": 62,
+#     "nodes": 1,
+#     "cpus_per_task": 20,
+#     "slurm_gres": "gpu:1",
+#     "tasks_per_node": 1,
+#     "slurm_signal_delay_s": 120,
+#     # "slurm_exclude": "matrix-1-[4,6,8,10,12,16,18,20],matrix-0-[24,34,38]", # Throw out non-rtx
+# #     "slurm_exclude": "matrix-1-[12,16,18],matrix-0-[24,34,38]", # Throw out non-rtx
 # }
 
 
@@ -133,11 +138,11 @@ def run_on_slurm(config_path, sif_path, checkpoint_path=None, ddp=False, num_gpu
     )
     job_name = config.experiment.name
     slurm_additional_parameters_loc = copy(slurm_additional_parameters)
-    slurm_additional_parameters_loc["job_name"] = job_name
-    slurm_additional_parameters_loc['gpus'] = num_gpus
-    slurm_additional_parameters_loc['mem'] = str(num_gpus * slurm_additional_parameters['mem']) + 'g'
+    slurm_additional_parameters_loc["name"] = job_name
+    slurm_additional_parameters_loc['slurm_gres'] = f"gpu:{num_gpus}"
+    slurm_additional_parameters_loc['mem_gb'] = str(num_gpus * slurm_additional_parameters['mem_gb'])
     print(slurm_additional_parameters)
-    executor.update_parameters(slurm_additional_parameters=slurm_additional_parameters_loc)
+    executor.update_parameters(**slurm_additional_parameters_loc)
     # absolute path to robomimic/scripts/train.py
     file_path = os.path.join(robomimic.__path__[0], "scripts/train.py")
     start_from_checkpoint = True if checkpoint_path is not None else False
