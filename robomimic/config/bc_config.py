@@ -117,3 +117,5 @@ class BCConfig(BaseConfig):
         self.algo.loss.collision_loss_params.margin = 0.03
         self.algo.loss.collision_loss_params.hinge_loss = True
         self.algo.loss.collision_loss_params.reduction = "mean"
+        self.algo.loss.collision_loss_params.smooth_sdf_loss = "none"
+        self.algo.loss.collision_loss_params.compute_loss_on_penetrations_only = False

@@ -926,10 +926,7 @@ class BC_RNN_GMM(BC_RNN):
             means = dists.mean
             curr_angles = curr_angles.reshape(-1, curr_angles.shape[-1])
             act_pred = means.reshape(-1, means.shape[-1])
-            # assumption is that curr_angles is not normalized
-            y_hat = torch.clamp(curr_angles + act_pred, min=FRANKA_LOWER_LIMITS, max=FRANKA_UPPER_LIMITS)
-            y_hat = franka_utils.normalize_franka_joints(y_hat) 
-            
+            y_hat = curr_angles + act_pred
             scene_pcd_params = batch["obs"]["saved_params"].reshape(-1, batch["obs"]["saved_params"].shape[-1])
             scene_pcd_params = scene_pcd_params[:, 14:]
             cuboid_dims, cuboid_centers, cuboid_quats, cylinder_radii, cylinder_heights, cylinder_centers, cylinder_quats, sphere_centers, sphere_radii, M = decompose_scene_pcd_params_obs_batched(scene_pcd_params)
@@ -947,6 +944,8 @@ class BC_RNN_GMM(BC_RNN):
                 reduction=self.algo_config.loss.collision_loss_params['reduction'],
                 hinge_loss=self.algo_config.loss.collision_loss_params['hinge_loss'],
                 margin=self.algo_config.loss.collision_loss_params['margin'],
+                smooth_sdf_loss=self.algo_config.loss.collision_loss_params['smooth_sdf_loss'],
+                compute_loss_on_penetrations_only=self.algo_config.loss.collision_loss_params['compute_loss_on_penetrations_only'],
             ) 
             predictions['collision_loss'] = collision_loss
         else:
