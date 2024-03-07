@@ -140,7 +140,7 @@ def run_on_slurm(config_path, sif_path, checkpoint_path=None, ddp=False, num_gpu
     slurm_additional_parameters_loc = copy(slurm_additional_parameters)
     slurm_additional_parameters_loc["name"] = job_name
     slurm_additional_parameters_loc['slurm_gres'] = f"gpu:{num_gpus}"
-    slurm_additional_parameters_loc['mem_gb'] = str(num_gpus * slurm_additional_parameters['mem_gb'])
+    slurm_additional_parameters_loc['mem_gb'] = num_gpus * slurm_additional_parameters['mem_gb']
     print(slurm_additional_parameters)
     executor.update_parameters(**slurm_additional_parameters_loc)
     # absolute path to robomimic/scripts/train.py
