@@ -949,8 +949,6 @@ class BC_RNN_GMM(BC_RNN):
             ) 
             predictions['collision_loss'] = collision_loss
             predictions['sdf_collision_rate'] = sdf_collisions.mean()
-        else:
-            predictions['collision_loss'] = torch.tensor(0.0, device=self.device)
         return predictions
 
     def _compute_losses(self, predictions, batch):
@@ -977,8 +975,9 @@ class BC_RNN_GMM(BC_RNN):
         losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
         losses['log_probs'] = -action_loss
         losses['action_loss'] = action_loss
-        losses['collision_loss'] = predictions['collision_loss']
-        losses['sdf_collision_rate'] = predictions['sdf_collision_rate']
+        if self.algo_config.loss.collision_weight > 0:
+            losses['collision_loss'] = predictions['collision_loss']
+            losses['sdf_collision_rate'] = predictions['sdf_collision_rate']
         return losses
 
     def log_info(self, info):

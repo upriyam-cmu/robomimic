@@ -221,11 +221,18 @@ def run_rollout(
     success = env.env_method("is_success")
     success = [{k: False for k in s} for s in success]  # success metrics
     video_images = []
+    open_loop = env.env_method("get_env_cfg", indices=[0])[0].data.open_loop
+    if open_loop:
+        actions = policy(ob=ob_dict, goal=goal_dict)
+        actions = actions.reshape(env.num_envs, -1, env.action_space.shape[0])
     
     try:
         for step_i in range(horizon):
-            # get action from policy
-            ac = policy(ob=ob_dict, goal=goal_dict)
+            if open_loop:
+                ac = actions[:, step_i]
+            else:
+                # get action from policy
+                ac = policy(ob=ob_dict, goal=goal_dict)
             # play action
             ob_dict, r, done, info = env.step(ac)
             # render to screen

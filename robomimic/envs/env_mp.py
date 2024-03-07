@@ -302,6 +302,12 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         Pretty-print env description.
         """
         return self.name + "\n" + json.dumps(self._init_kwargs, sort_keys=True, indent=4)
+    
+    def get_env_cfg(self):
+        """
+        Get environment configuration.
+        """
+        return self.env.cfg
 
 def render_pointcloud(pcd):
     device = torch.device("cuda:0")
