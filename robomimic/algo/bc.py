@@ -965,6 +965,9 @@ class BC_RNN_GMM(BC_RNN):
             ) 
             predictions['collision_loss'] = collision_loss
             predictions['sdf_collision_rate'] = sdf_collisions.mean()
+        else:
+            predictions['collision_loss'] = torch.zeros(1, device=self.device)
+            predictions['sdf_collision_rate'] = torch.zeros(1, device=self.device)
         return predictions
 
     def _compute_losses(self, predictions, batch):
