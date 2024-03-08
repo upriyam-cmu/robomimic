@@ -36,7 +36,7 @@ from pytorch3d.renderer import (
 )
 
 from neural_mp.envs.franka_pybullet_env import depth_to_rgb, compute_full_pcd
-
+import h5py
 
 class EnvMP(EB.EnvBase, gymnasium.Env):
     """Wrapper class for motion planning envs"""
@@ -49,6 +49,7 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         postprocess_visual_obs=True, 
         pcd_params=None,
         mpinets_enabled=False,
+        dataset_path=None,
         **kwargs,
     ):
         """
@@ -63,6 +64,18 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
             use_image_obs (bool): ignored - gym envs don't typically use images
 
             postprocess_visual_obs (bool): ignored - gym envs don't typically use images
+            
+            pcd_params (dict): parameters for point cloud processing
+            
+            mpinets_enabled (bool): whether to use mpinets style unprocessing of delta actions
+            
+            dataset_path (str): path to dataset
+            
+            split (str): split of dataset to use
+            
+            env_idx (int): index of parallel env
+            
+            num_envs (int): number of parallel envs
         """
         if type(kwargs['cfg']) == dict:
             cfg = OmegaConf.create(kwargs['cfg'])
@@ -88,6 +101,37 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self.action_space = gymnasium.spaces.Box(
             low=-1*np.ones(7), high=np.ones(7), dtype=np.float32
         )
+        self.dataset_path = dataset_path
+        self.split = None
+        self.demos = None
+        self.num_envs = 1
+    
+    def set_env_specific_params(self, split, env_idx, num_envs):
+        """
+        Note this sets params for the parallel envs to sample different demonstrations to init from
+        This needs to be run before running the env!
+        """
+        self.split = split
+        if split is not None:
+            self.dataset_path = self.dataset_path    
+            f = h5py.File(self.dataset_path, "r")
+            self.hdf5_file = f
+            filter_key = split
+
+            # list of all demonstration episodes (sorted in increasing number order)
+            if filter_key is not None:
+                print("using filter key: {}".format(filter_key))
+                demos = [elem.decode("utf-8") for elem in np.array(f["mask/{}".format(filter_key)])]
+            else:
+                demos = list(f["data"].keys())
+            inds = np.argsort([int(elem[5:]) for elem in demos])
+            if split == 'valid':
+                env_idx = env_idx - num_envs
+            self.demos = [demos[i] for i in inds if i % num_envs == env_idx]
+            print("env idx: {}, split: {}, demos: {}".format(env_idx, split, len(self.demos)))
+        else:
+            self.demos = None
+        self.num_envs = num_envs
 
     def step(self, action):
         """
@@ -108,6 +152,39 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self._current_done = done
         done = self.is_done()
         trunc = self.is_done() # this is ignored but necessary for gymanasium compatibility
+        if self.num_envs > 1:
+            # add dummy (None) values for other splits:
+            new_info = {}
+            for split in ["train", "valid", None]:
+                if split != self.split:
+                    for k, v in info.items():
+                        if split is None:
+                            new_info[k] = None
+                        else:
+                            new_info['{}/{}'.format(split, k)] = None
+            if self.demos is not None:
+                # add self.split as a prefix to every key in infos
+                info = {f"{self.split}/{k}": v for k, v in info.items()}
+                if self.current_step < len(self.plan):
+                    action_err = np.linalg.norm(action - self.plan[self.current_step])
+                    action_mse = np.mean((action - self.plan[self.current_step])**2)
+                    info[f"{self.split}/action_err"] = action_err.item()
+                    info[f"{self.split}/action_mse"] = action_mse.item()
+                    for split in ['train', 'valid']:
+                        if split != self.split:
+                            info[f"{split}/action_err"] = None
+                            info[f"{split}/action_mse"] = None
+                else:
+                    for split in ['train', 'valid']:
+                        info[f"{split}/action_err"] = None
+                        info[f"{split}/action_mse"] = None
+            else:
+                for split in ['train', 'valid']:
+                    info[f"{split}/action_err"] = None
+                    info[f"{split}/action_mse"] = None  
+            new_info.update(info)
+            info = new_info
+        self.current_step += 1
         return self.get_observation(obs), reward, self.is_done(), trunc, info
 
     def reset(self, seed=None):
@@ -125,7 +202,15 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self._current_reward = None
         self._current_done = self.is_success()
         reset_infos = {} # this is ignored but necessary for gymanasium compatibility
-        return self.get_observation(self._current_obs), reset_infos
+        self.current_step = 0
+        # sample a new demonstration
+        if self.demos is not None:
+            ep = np.random.choice(self.demos)
+            self.states = self.hdf5_file["data/{}/states".format(ep)][()]
+            self.plan = self.hdf5_file["data/{}/actions".format(ep)][()]
+            return self.reset_to({"states": self.states[0]}), reset_infos
+        else:
+            return self.get_observation(self._current_obs), reset_infos
 
     def reset_to(self, state):
         """
@@ -229,7 +314,18 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         { str: bool } with at least a "task" key for the overall task success,
         and additional optional keys corresponding to other task criteria.
         """
-        return dict(task=float(self.env.get_success(self.env.goal_angles)[0]))
+        success = float(self.env.get_success(self.env.goal_angles)[0])
+        if self.num_envs > 1:
+            return_dict = dict()
+            for split in ["train", "valid", None]:
+                key = split if split is not None else 'task'
+                if self.split == split:
+                    return_dict[key] = success
+                else:
+                    return_dict[key] = None
+        else:
+            return_dict = {"task": success}
+        return return_dict
 
     @property
     def action_dimension(self):

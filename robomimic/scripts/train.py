@@ -47,7 +47,8 @@ import torch.distributed as dist
 import torch.nn as nn
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 
-def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled):
+def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, dataset_path):
+    env_meta['env_kwargs']['dataset_path'] = dataset_path
     env = EnvUtils.create_env_from_metadata(
         env_meta=env_meta,
         render=False, 
@@ -139,15 +140,22 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                 mpinets_enabled = config.algo.mpinets.enabled
                 render_video = config.experiment.render_video
                 if config.experiment.num_envs > 1:
-                    env = SubprocVecEnv(
-                        [
-                            lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled)
-                            for _ in range(10)
-                        ],
-                        start_method='fork' #isnt threadsafe but only version that runs at reasonable speeds
-                    )
+                    env_fns = []
+                    for env_idx in range(config.experiment.num_envs):
+                        env_fn = lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)
+                        env_fns.append(env_fn)
+                    env = SubprocVecEnv(env_fns, start_method='fork')
+                    for env_idx in range(config.experiment.num_envs):
+                        if env_idx < 5:
+                            split = 'train'
+                        elif env_idx < 10:
+                            split = 'valid'
+                        else:
+                            split = None
+                        num_split_envs = 5 # because each split has 5 envs (for train and val)
+                        env.env_method("set_env_specific_params", split, env_idx, num_split_envs, indices=[env_idx])
                 else:
-                    env = DummyVecEnv([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled)])
+                    env = DummyVecEnv([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)])
 
                 envs[env_name] = env
                 print(envs[env_name])

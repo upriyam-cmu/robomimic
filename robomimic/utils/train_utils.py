@@ -277,13 +277,13 @@ def run_rollout(
     new_info = {}
     for k in info[0]:
         if k != "TimeLimit.truncated":
-            new_info[k] = np.mean([info[i][k] for i in range(len(info))])
+            new_info[k] = np.mean([info[i][k] for i in range(len(info)) if info[i][k] is not None])
     results.update(new_info)
     
     # log additional success metrics
     for k in success[0]:
         if k != "task":
-            results["{}_Success".format(k)] = np.mean([float(s[k]) for s in success])
+            results["{}_Success".format(k)] = np.mean([float(s[k]) for s in success if s[k] is not None])
     return results
 
 
