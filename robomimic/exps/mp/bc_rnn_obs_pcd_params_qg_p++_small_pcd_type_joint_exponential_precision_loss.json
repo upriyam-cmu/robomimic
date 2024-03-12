@@ -1,7 +1,7 @@
 {
     "algo_name": "bc",
     "experiment": {
-        "name": "bc",
+        "name": "bc_rnn_mp_pcd_only",
         "validate": true,
         "logging": {
             "terminal_output_to_txt": false,
@@ -52,7 +52,7 @@
         "hdf5_normalize_obs": false,
         "hdf5_filter_key": "train",
         "hdf5_validation_filter_key": "valid",
-        "seq_length": 1,
+        "seq_length": 2,
         "pad_seq_length": true,
         "frame_stack": 1,
         "pad_frame_stack": true,
@@ -83,12 +83,10 @@
         "loss": {
             "l2_weight": 1.0,
             "l1_weight": 0.0,
-            "cos_weight": 0.0
+            "cos_weight": 0.0,
+            "exponential_precision_weight": 1.0
         },
-        "actor_layer_dims": [
-            4096,
-            4096
-        ],
+        "actor_layer_dims": [],
         "gaussian": {
             "enabled": false,
             "fixed_std": false,
@@ -140,9 +138,9 @@
             ]
         },
         "rnn": {
-            "enabled": false,
-            "horizon": 10,
-            "hidden_dim": 400,
+            "enabled": true,
+            "horizon": 2,
+            "hidden_dim": 1024,
             "rnn_type": "LSTM",
             "num_layers": 2,
             "open_loop": false,

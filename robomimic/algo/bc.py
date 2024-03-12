@@ -509,7 +509,128 @@ class BC_GMM(BC_Gaussian):
         )
 
         self.nets = self.nets.float().to(self.device)
+    
+    def _forward_training(self, batch):
+        """
+        Internal helper function for BC algo class. Compute forward pass
+        and return network outputs in @predictions dict.
 
+        Args:
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+        Returns:
+            predictions (dict): dictionary containing network outputs
+        """
+        dists = self.nets['policy']('train', 
+            obs_dict=batch["obs"], 
+            goal_dict=batch["goal_obs"],
+        )
+
+        # make sure that this is a batch of multivariate action distributions, so that
+        # the log probability computation will be correct
+        assert len(dists.batch_shape) == 2 # [B, T]
+        log_probs = dists.log_prob(batch["actions"])
+        
+        predictions = OrderedDict(
+            log_probs=log_probs,
+            actions=dists.sample(),
+        )
+        
+    
+    def _forward_training(self, batch):
+        """
+        Internal helper function for BC algo class. Compute forward pass
+        and return network outputs in @predictions dict.
+
+        Args:
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+        Returns:
+            predictions (dict): dictionary containing network outputs
+        """
+        dists = self.nets['policy']('train', 
+            obs_dict=batch["obs"], 
+            goal_dict=batch["goal_obs"],
+        )
+
+        # make sure that this is a batch of multivariate action distributions, so that
+        # the log probability computation will be correct
+        assert len(dists.batch_shape) == 1
+        log_probs = dists.log_prob(batch["actions"])
+
+        predictions = OrderedDict(
+            log_probs=log_probs,
+            actions=dists.sample()
+        )
+        if self.algo_config.loss.exponential_precision_weight > 0:
+            act_pred = dists.mean
+            sq_error = (act_pred - batch['actions']) ** 2
+            predictions['exponential_precision_loss'] = -1*(torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)).mean()
+        else:
+            predictions['exponential_precision_loss'] = torch.tensor(0.0).to(self.device)
+            
+        return predictions
+
+    def _compute_losses(self, predictions, batch):
+        """
+        Internal helper function for BC algo class. Compute losses based on
+        network outputs in @predictions dict, using reference labels in @batch.
+
+        Args:
+            predictions (dict): dictionary containing network outputs, from @_forward_training
+            batch (dict): dictionary with torch.Tensors sampled
+                from a data loader and filtered by @process_batch_for_training
+
+        Returns:
+            losses (dict): dictionary of losses computed over the batch
+        """
+
+        # loss is just negative log-likelihood of action targets
+        exponential_precision_weight = self.algo_config.loss.exponential_precision_weight
+        action_loss = -predictions["log_probs"].mean() + exponential_precision_weight * predictions['exponential_precision_loss']
+        actions = predictions["actions"]
+        a_target = batch["actions"]
+        losses = OrderedDict(
+            log_probs=-action_loss,
+            action_loss=action_loss,
+        ) 
+        losses["l2_loss"] = nn.MSELoss()(actions, a_target)
+        losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
+        # cosine direction loss on eef delta position
+        losses["cos_loss"] = LossUtils.cosine_loss(actions[..., :3], a_target[..., :3])
+        losses['log_probs'] = -action_loss
+        losses['action_loss'] = action_loss
+        if exponential_precision_weight > 0:
+            losses['exponential_precision_loss'] = predictions['exponential_precision_loss']
+        return losses 
+
+    def log_info(self, info):
+        """
+        Process info dictionary from @train_on_batch to summarize
+        information to pass to tensorboard for logging.
+
+        Args:
+            info (dict): dictionary of info
+
+        Returns:
+            loss_log (dict): name -> summary statistic
+        """
+        log = PolicyAlgo.log_info(self, info)
+        log["Loss"] = info["losses"]["action_loss"].item()
+        log["Log_Likelihood"] = info["losses"]["log_probs"].item() 
+        if "policy_grad_norms" in info:
+            log["Policy_Grad_Norms"] = info["policy_grad_norms"]
+        if "l2_loss" in info["losses"]:
+            log["L2_Loss"] = info["losses"]["l2_loss"].item()
+        if "l1_loss" in info["losses"]:
+            log["L1_Loss"] = info["losses"]["l1_loss"].item()
+        if "cos_loss" in info["losses"]:
+            log["Cosine_Loss"] = info["losses"]["cos_loss"].item()
+        if "exponential_precision_loss" in info["losses"]:
+            log["Exponential_Precision_Loss"] = info["losses"]["exponential_precision_loss"].item()
+        return log
 
 class BC_VAE(BC):
     """
@@ -935,7 +1056,20 @@ class BC_RNN_GMM(BC_RNN):
             log_probs=log_probs,
             actions=dists.sample(),
         )
-        
+        if self.algo_config.loss.exponential_precision_weight > 0:
+            # act_pred = dists.mean
+            # sq_error = (act_pred - batch['actions']) ** 2
+            # additional_loss = -1*(torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)).mean()
+            
+            # alternatively we compute the loss per mean and then do a weighted sum
+            component_means = dists.component_distribution.mean
+            component_weights = dists.mixture_distribution.probs
+            sq_error = (component_means - batch['actions'].unsqueeze(2)) ** 2 # shape (B, T, M, A)
+            additional_loss = torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)
+            predictions['exponential_precision_loss'] = -1*(additional_loss * component_weights.unsqueeze(-1)).sum(dim=-2).mean()
+        else:
+            predictions['exponential_precision_loss'] = torch.zeros(1, device=self.device)
+
         if self.algo_config.loss.collision_weight > 0:
             curr_angles = batch['obs']['current_angles']
             # compute overall mean of gmm:
@@ -987,7 +1121,9 @@ class BC_RNN_GMM(BC_RNN):
         a_target = batch["actions"]
         actions = predictions["actions"]
         # loss is just negative log-likelihood of action targets
-        action_loss = -predictions["log_probs"].mean() + self.algo_config.loss.collision_weight * predictions['collision_loss']
+        collision_weight = self.algo_config.loss.collision_weight
+        exponential_precision_weight = self.algo_config.loss.exponential_precision_weight
+        action_loss = -predictions["log_probs"].mean() + collision_weight * predictions['collision_loss'] + exponential_precision_weight * predictions['exponential_precision_loss']
         losses["l2_loss"] = nn.MSELoss()(actions, a_target)
         losses["l1_loss"] = nn.SmoothL1Loss()(actions, a_target)
         # cosine direction loss on eef delta position
@@ -997,6 +1133,8 @@ class BC_RNN_GMM(BC_RNN):
         if self.algo_config.loss.collision_weight > 0:
             losses['collision_loss'] = predictions['collision_loss']
             losses['sdf_collision_rate'] = predictions['sdf_collision_rate']
+        if exponential_precision_weight > 0:
+            losses['exponential_precision_loss'] = predictions['exponential_precision_loss']
         return losses
 
     def log_info(self, info):
@@ -1025,6 +1163,8 @@ class BC_RNN_GMM(BC_RNN):
             log["Collision_Loss"] = info["losses"]["collision_loss"].item()
         if "sdf_collision_rate" in info["losses"]:
             log["SDF_Collision_Rate"] = info["losses"]["sdf_collision_rate"].item()
+        if "exponential_precision_loss" in info["losses"]:
+            log["Exponential_Precision_Loss"] = info["losses"]["exponential_precision_loss"].item()
         return log
 
 

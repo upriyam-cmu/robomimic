@@ -83,7 +83,8 @@
         "loss": {
             "l2_weight": 1.0,
             "l1_weight": 0.0,
-            "cos_weight": 0.0
+            "cos_weight": 0.0,
+            "exponential_precision_weight": 1.0
         },
         "actor_layer_dims": [
             4096,
