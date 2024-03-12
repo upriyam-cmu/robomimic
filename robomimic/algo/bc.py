@@ -565,11 +565,13 @@ class BC_GMM(BC_Gaussian):
             actions=dists.sample()
         )
         if self.algo_config.loss.exponential_precision_weight > 0:
-            act_pred = dists.mean
-            sq_error = (act_pred - batch['actions']) ** 2
-            predictions['exponential_precision_loss'] = -1*(torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)).mean()
+            component_means = dists.component_distribution.mean
+            component_weights = dists.mixture_distribution.probs
+            sq_error = (component_means - batch['actions'].unsqueeze(1)) ** 2 # shape (B, M, A)
+            additional_loss = torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)
+            predictions['exponential_precision_loss'] = -1*(additional_loss * component_weights.unsqueeze(-1)).sum(dim=-2).mean()
         else:
-            predictions['exponential_precision_loss'] = torch.tensor(0.0).to(self.device)
+            predictions['exponential_precision_loss'] = torch.zeros(1, device=self.device)
             
         return predictions
 
@@ -1057,11 +1059,6 @@ class BC_RNN_GMM(BC_RNN):
             actions=dists.sample(),
         )
         if self.algo_config.loss.exponential_precision_weight > 0:
-            # act_pred = dists.mean
-            # sq_error = (act_pred - batch['actions']) ** 2
-            # additional_loss = -1*(torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)).mean()
-            
-            # alternatively we compute the loss per mean and then do a weighted sum
             component_means = dists.component_distribution.mean
             component_weights = dists.mixture_distribution.probs
             sq_error = (component_means - batch['actions'].unsqueeze(2)) ** 2 # shape (B, T, M, A)
