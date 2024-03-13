@@ -567,9 +567,9 @@ class BC_GMM(BC_Gaussian):
         if self.algo_config.loss.exponential_precision_weight > 0:
             component_means = dists.component_distribution.mean
             component_weights = dists.mixture_distribution.probs
-            sq_error = (component_means - batch['actions'].unsqueeze(1)) ** 2 # shape (B, M, A)
-            additional_loss = torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)
-            predictions['exponential_precision_loss'] = -1*(additional_loss * component_weights.unsqueeze(-1)).sum(dim=-2).mean()
+            sq_error = ((component_means - batch['actions'].unsqueeze(1)) ** 2).mean(dim=-1) # shape (B, M)
+            additional_loss = torch.exp(-1000*sq_error) + torch.exp(-10000*sq_error) # shape (B, M)
+            predictions['exponential_precision_loss'] = -1*(additional_loss * component_weights).sum(dim=-1).mean() # shape (B, M) -> (B) -> scalar
         else:
             predictions['exponential_precision_loss'] = torch.zeros(1, device=self.device)
             
@@ -1061,12 +1061,12 @@ class BC_RNN_GMM(BC_RNN):
         if self.algo_config.loss.exponential_precision_weight > 0:
             component_means = dists.component_distribution.mean
             component_weights = dists.mixture_distribution.probs
-            sq_error = (component_means - batch['actions'].unsqueeze(2)) ** 2 # shape (B, T, M, A)
-            additional_loss = torch.exp(-1*sq_error) + torch.exp(-10*sq_error) + torch.exp(-100*sq_error)
-            predictions['exponential_precision_loss'] = -1*(additional_loss * component_weights.unsqueeze(-1)).sum(dim=-2).mean()
+            sq_error = ((component_means - batch['actions'].unsqueeze(2)) ** 2).mean(dim=-1) # shape (B, T, M)
+            additional_loss = torch.exp(-1000*sq_error) + torch.exp(-10000*sq_error)
+            predictions['exponential_precision_loss'] = -1*(additional_loss * component_weights).sum(dim=-1).mean()
         else:
             predictions['exponential_precision_loss'] = torch.zeros(1, device=self.device)
-
+            
         if self.algo_config.loss.collision_weight > 0:
             curr_angles = batch['obs']['current_angles']
             # compute overall mean of gmm:
