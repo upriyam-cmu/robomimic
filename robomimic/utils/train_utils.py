@@ -219,7 +219,7 @@ def run_rollout(
 
     total_reward = 0.
     success = env.env_method("is_success")
-    success = [{k: False for k in s} for s in success]  # success metrics
+    success = [{k: bool(s[k]) for k in s if s[k] is not None} for s in success]  # success metrics
     video_images = []
     open_loop = env.env_method("get_env_cfg", indices=[0])[0].data.open_loop
     if open_loop:
@@ -243,7 +243,7 @@ def run_rollout(
             total_reward += r
 
             cur_success_metrics = env.env_method("is_success")
-            cur_success_metrics = [{k: bool(s[k]) for k in s} for s in cur_success_metrics]
+            cur_success_metrics = [{k: bool(s[k]) for k in s if s[k] is not None} for s in cur_success_metrics]
             for s, curr_s in zip(success, cur_success_metrics):
                 for k in s:
                     s[k] = s[k] or curr_s[k]
@@ -255,7 +255,10 @@ def run_rollout(
                     video_images.append(ims)
                 video_count += 1
             # break if done
-            if all(done) or (terminate_on_success and all([s["task"] for s in success])):
+            all_task_success = all([s["task"] for s in success if 'task' in success])
+            all_train_success = all([s["train"] for s in success if 'train' in success])
+            all_valid_success = all([s["valid"] for s in success if 'valid' in success])
+            if all(done) or (terminate_on_success and all_task_success and all_train_success and all_valid_success):
                 break
     except:
         print(traceback.format_exc())
@@ -270,7 +273,7 @@ def run_rollout(
     
     results["Return"] = 0.0 # NOTE: env returns 0 anyways, but this is causing issues for some reason
     results["Horizon"] = step_i + 1
-    results["Success_Rate"] = np.mean([float(s["task"]) for s in success])
+    results["Success_Rate"] = np.mean([float(s["task"]) for s in success if 'task' in s])
     print("Success Rate: ", results["Success_Rate"])
 
     # convert info from list of dicts to dict of lists
@@ -279,11 +282,8 @@ def run_rollout(
         if k != "TimeLimit.truncated":
             new_info[k] = np.mean([info[i][k] for i in range(len(info)) if info[i][k] is not None])
     results.update(new_info)
-    
-    # log additional success metrics
-    for k in success[0]:
-        if k != "task":
-            results["{}_Success".format(k)] = np.mean([float(s[k]) for s in success if s[k] is not None])
+    results['Train_Success'] = np.mean([float(s["train"]) for s in success if 'train' in s])
+    results['Valid_Success'] = np.mean([float(s["valid"]) for s in success if 'valid' in s])
     return results
 
 
