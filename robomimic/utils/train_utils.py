@@ -225,7 +225,6 @@ def run_rollout(
     if open_loop:
         actions = policy(ob=ob_dict, goal=goal_dict)
         actions = actions.reshape(env.num_envs, -1, env.action_space.shape[0])
-    
     try:
         for step_i in range(horizon):
             if open_loop:
@@ -255,15 +254,14 @@ def run_rollout(
                     video_images.append(ims)
                 video_count += 1
             # break if done
-            all_task_success = all([s["task"] for s in success if 'task' in success])
-            all_train_success = all([s["train"] for s in success if 'train' in success])
-            all_valid_success = all([s["valid"] for s in success if 'valid' in success])
+            all_task_success = all([s["task"] for s in success if 'task' in s])
+            all_train_success = all([s["train"] for s in success if 'train' in s])
+            all_valid_success = all([s["valid"] for s in success if 'valid' in s])
             if all(done) or (terminate_on_success and all_task_success and all_train_success and all_valid_success):
                 break
     except:
         print(traceback.format_exc())
         print("WARNING: got rollout exception")
-
 
     # combine the videos into one sequential video
     if video_writer is not None:

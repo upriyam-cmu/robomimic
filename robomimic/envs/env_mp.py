@@ -168,16 +168,21 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
                 if self.current_step < len(self.plan):
                     action_err = np.linalg.norm(action - self.plan[self.current_step])
                     action_mse = np.mean((action - self.plan[self.current_step])**2)
-                    info[f"{self.split}/action_err"] = action_err.item()
-                    info[f"{self.split}/action_mse"] = action_mse.item()
+                    self.total_action_err += action_err.item()
+                    self.total_action_mse += action_mse.item()
+                    info[f"{self.split}/action_err"] = self.total_action_err / (self.current_step + 1)
+                    info[f"{self.split}/action_mse"] = self.total_action_mse / (self.current_step + 1)
                     for split in ['train', 'valid']:
                         if split != self.split:
                             info[f"{split}/action_err"] = None
                             info[f"{split}/action_mse"] = None
                 else:
+                    info[f"{self.split}/action_err"] = self.total_action_err / len(self.plan)
+                    info[f"{self.split}/action_mse"] = self.total_action_mse / len(self.plan)
                     for split in ['train', 'valid']:
-                        info[f"{split}/action_err"] = None
-                        info[f"{split}/action_mse"] = None
+                        if split != self.split:
+                            info[f"{split}/action_err"] = None
+                            info[f"{split}/action_mse"] = None
             else:
                 for split in ['train', 'valid']:
                     info[f"{split}/action_err"] = None
@@ -208,6 +213,8 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
             ep = np.random.choice(self.demos)
             self.states = self.hdf5_file["data/{}/states".format(ep)][()]
             self.plan = self.hdf5_file["data/{}/actions".format(ep)][()]
+            self.total_action_err = 0
+            self.total_action_mse = 0
             return self.reset_to({"states": self.states[0]}), reset_infos
         else:
             return self.get_observation(self._current_obs), reset_infos
