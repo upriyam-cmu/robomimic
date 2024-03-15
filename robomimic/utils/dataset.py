@@ -159,6 +159,7 @@ class SequenceDataset(torch.utils.data.Dataset):
         else:
             self.hdf5_cache = None
         self.close_and_delete_hdf5_handle()
+        self.ep_to_hdf5_file = None
 
     def load_demo_info(self, filter_by_attribute=None, demos=None):
         """
@@ -378,28 +379,30 @@ class SequenceDataset(torch.utils.data.Dataset):
         Helper utility to get a dataset for a specific demonstration.
         Takes into account whether the dataset has been loaded into memory.
         """
+        if self.ep_to_hdf5_file is None:
+            self.ep_to_hdf5_file = {ep: self.hdf5_file for ep in self.demos}
         # check if this key should be in memory
-        key_should_be_in_memory = (self.hdf5_cache_mode in ["all", "low_dim"])
+        key_should_be_in_memory = self.hdf5_cache_mode in ["all", "low_dim"]
         if key_should_be_in_memory:
             # if key is an observation, it may not be in memory
-            if '/' in key:
-                key1, key2 = key.split('/')
-                assert(key1 in ['obs', 'next_obs'])
+            if "/" in key:
+                key1, key2 = key.split("/")
+                assert key1 in ["obs", "next_obs"]
                 if key2 not in self.obs_keys_in_memory:
                     key_should_be_in_memory = False
 
         if key_should_be_in_memory:
             # read cache
-            if '/' in key:
-                key1, key2 = key.split('/')
-                assert(key1 in ['obs', 'next_obs'])
+            if "/" in key:
+                key1, key2 = key.split("/")
+                assert key1 in ["obs", "next_obs"]
                 ret = self.hdf5_cache[ep][key1][key2]
             else:
                 ret = self.hdf5_cache[ep][key]
         else:
             # read from file
             hd5key = "data/{}/{}".format(ep, key)
-            ret = self.hdf5_file[hd5key]
+            ret = self.ep_to_hdf5_file[ep][hd5key]
         return ret
 
     def __getitem__(self, index):
@@ -640,3 +643,50 @@ class SequenceDataset(torch.utils.data.Dataset):
         `DataLoader` documentation, for more info.
         """
         return None
+    
+    def update_demo_info(self, demos, online_epoch, data, hdf5_file=None):
+        """
+        This function is called during online epochs to update the demo information based
+        on newly collected demos.
+        Args:
+            demos (list): list of demonstration keys to load data.
+            online_epoch (int): value of the current online epoch
+            data (dict): dictionary containing newly collected demos
+        """
+        if self.ep_to_hdf5_file is None:
+            self.ep_to_hdf5_file = {ep: self.hdf5_file for ep in self.demos}
+        # sort demo keys
+        inds = np.argsort(
+            [int(elem[5:]) for elem in demos]
+        )
+        new_demos = [demos[i] for i in inds]
+        self.demos.extend(new_demos)
+
+        self.n_demos = len(self.demos)
+
+        self.prev_total_num_sequences = self.total_num_sequences
+        for new_ep in new_demos:
+            self.ep_to_hdf5_file[new_ep] = hdf5_file
+            demo_length = data[new_ep]["num_samples"]
+            self._demo_id_to_start_indices[new_ep] = self.total_num_sequences
+            self._demo_id_to_demo_length[new_ep] = demo_length
+
+            num_sequences = demo_length
+            # determine actual number of sequences taking into account whether to pad for frame_stack and seq_length
+            if not self.pad_frame_stack:
+                num_sequences -= self.n_frame_stack - 1
+            if not self.pad_seq_length:
+                num_sequences -= self.seq_length - 1
+
+            if self.pad_seq_length:
+                assert demo_length >= 1  # sequence needs to have at least one sample
+                num_sequences = max(num_sequences, 1)
+            else:
+                assert (
+                    num_sequences >= 1
+                )  # assume demo_length >= (self.n_frame_stack - 1 + self.seq_length)
+
+            for _ in range(num_sequences):
+                self._index_to_demo_id[self.total_num_sequences] = new_ep
+                self.total_num_sequences += 1
+        return new_demos

@@ -218,6 +218,64 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
             return self.reset_to({"states": self.states[0]}), reset_infos
         else:
             return self.get_observation(self._current_obs), reset_infos
+    
+    def set_to_env_sampling(self):
+        """
+        Set the environment to sampling randomly (in case it is sampling from dataset states).
+        """
+        self.saved_demos = self.demos
+        self.saved_split = self.split
+        self.demos = None
+        self.split = None
+    
+    def set_to_env_original(self):
+        """
+        Set the environment back to the original state (in case it was sampling from dataset states).
+        """
+        self.demos = self.saved_demos
+        self.split = self.saved_split
+    
+    def finish_traj_with_mp(self, start_configs, goal_configs, num_waypoints, env_idx):
+        start_config, goal_config = start_configs[env_idx], goal_configs[env_idx]
+        num_waypoints = num_waypoints[env_idx]
+        self.env.set_robot_joint_state(start_config)
+        mp_kwargs = self.env.cfg.task.mp_kwargs.copy()
+        mp_kwargs['num_waypoints'] = int(num_waypoints)
+        plan, _, plan_obs, planning_states = self.env.mp_to_joint_target(
+            goal_config, **mp_kwargs
+        )
+        obs = self.get_observation()
+        cfg = self.env.cfg
+        if plan is not None:
+            # TODO: make it re-try till it works or max retries
+            # make sure plan is within joint limits:
+            lower, upper = self.env.get_joint_limits()
+            if np.any(np.less(plan, lower)) or np.any(np.greater(plan, upper)):
+                print("Plan is not within joint limits, skipping")
+                return {}
+            plan = np.array(plan)
+            current_configs = plan[:-1, :]  # remove the goal state from the current configs
+            plan = plan[1:, :]  # remove the start state from the predicted waypoints
+            if cfg.data.convert_plan_to_delta:
+                plan = plan - current_configs
+            else:
+                plan = self.env.normalize_franka_joints(plan)
+
+            if cfg.data.open_loop:
+                traj = {
+                    "actions": plan.reshape(1, -1).astype(np.float32),
+                    "obs": {k: v for k, v in plan_obs[0].items()},
+                    "states": np.array(planning_states).astype(np.float32),
+                }
+            else:
+                traj = {
+                    "actions": plan.astype(np.float32),
+                    "obs": plan_obs,
+                    "states": np.array(planning_states).astype(np.float32),
+                }
+            return traj
+        else:
+            return {}
 
     def reset_to(self, state):
         """

@@ -46,6 +46,16 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 import torch.nn as nn
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+import h5py
+
+class SubprocVecEnvWrapper(SubprocVecEnv):
+    def env_method_pass_idx(self, method_name: str, *method_args, indices = None, **method_kwargs):
+        """Call instance methods of vectorized environments."""
+        target_remotes = self._get_target_remotes(indices)
+        for env_idx, remote in enumerate(target_remotes):
+            method_kwargs['env_idx'] = env_idx
+            remote.send(("env_method", (method_name, method_args, method_kwargs)))
+        return [remote.recv() for remote in target_remotes]
 
 def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, dataset_path):
     env_meta['env_kwargs']['dataset_path'] = dataset_path
@@ -144,7 +154,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     for env_idx in range(config.experiment.num_envs):
                         env_fn = lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)
                         env_fns.append(env_fn)
-                    env = SubprocVecEnv(env_fns, start_method='fork')
+                    env = SubprocVecEnvWrapper(env_fns, start_method='fork')
                     for env_idx in range(config.experiment.num_envs):
                         if env_idx < 5:
                             split = 'train'
@@ -400,6 +410,30 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
 
         # do rollouts at fixed rate or if it's time to save a new ckpt
         if rank == 0:
+            if config.experiment.dagger.enabled:
+                # wrap model as a RolloutPolicy to prepare for rollouts
+                rollout_model = RolloutPolicy(model, obs_normalization_stats=obs_normalization_stats)
+                dagger_data_dir = os.path.join(log_dir, "dagger_data")
+                os.makedirs(dagger_data_dir, exist_ok=True)
+                dataset_path = os.path.join(dagger_data_dir, f"online_dataset_{epoch}.hdf5")
+                data_writer = h5py.File(dataset_path, "w")
+                online_epoch = epoch // config.experiment.dagger.online_epoch_rate
+                data = TrainUtils.collect_online_dataset(
+                    policy=rollout_model,
+                    envs=envs,
+                    horizon=config.experiment.rollout.horizon,
+                    use_goals=config.use_goals,
+                    num_episodes=config.experiment.dagger.num_episodes,
+                    render=False,
+                    terminate_on_success=config.experiment.rollout.terminate_on_success,
+                    online_epoch=online_epoch,
+                    resampling_strategy=config.experiment.dagger.resampling_strategy,
+                    num_trajs_to_relabel=config.experiment.dagger.num_trajs_to_relabel,
+                    data_writer=data_writer,
+                )
+                trainset.update_demo_info(
+                    list(data.keys()), online_epoch, data, hdf5_file=data_writer
+                )
             video_paths = None
             rollout_check = (epoch % config.experiment.rollout.rate == 0) or (should_save_ckpt and ckpt_reason == "time")
             if config.experiment.rollout.enabled and (epoch > config.experiment.rollout.warmstart) and rollout_check:

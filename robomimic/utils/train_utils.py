@@ -11,6 +11,7 @@ import shutil
 import json
 import h5py
 import imageio
+from neural_mp.combine_hdf5 import write_trajectory_to_dataset
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -625,3 +626,287 @@ def is_every_n_steps(interval, current_step, skip_zero=False):
     if skip_zero and current_step == 0:
         return False
     return current_step % interval == 0
+
+def run_dagger_rollout(
+        policy, 
+        env, 
+        horizon,
+        use_goals=False,
+        terminate_on_success=False,
+        resampling_strategy='all'
+    ):
+    """
+    Runs a rollout in an environment with the current network parameters.
+
+    Args:
+        policy (RolloutPolicy instance): policy to use for rollouts.
+
+        env (EnvBase instance): environment to use for rollouts.
+
+        horizon (int): maximum number of steps to roll the agent out for
+
+        use_goals (bool): if True, agent is goal-conditioned, so provide goal observations from env
+
+        render (bool): if True, render the rollout to the screen
+
+        video_writer (imageio Writer instance): if not None, use video writer object to append frames at 
+            rate given by @video_skip
+
+        video_skip (int): how often to write video frame
+
+        terminate_on_success (bool): if True, terminate episode early as soon as a success is encountered
+
+    Returns:
+        results (dict): dictionary containing return, success rate, etc.
+    """
+    assert isinstance(policy, RolloutPolicy)
+
+    policy.start_episode()
+
+    env.seed(np.random.randint(0, 1000000))
+    ob_dict = env.reset()
+    goal_dict = None
+    if use_goals:
+        # retrieve goal from the environment
+        goal_dict = env.get_goal()
+
+    results = {}
+    video_count = 0  # video frame counter
+
+    total_reward = 0.
+    success = env.env_method("is_success")
+    success = [{k: False for k in s} for s in success]  # success metrics
+    video_images = []
+    open_loop = env.env_method("get_env_cfg", indices=[0])[0].data.open_loop
+    if open_loop:
+        actions = policy(ob=ob_dict, goal=goal_dict)
+        actions = actions.reshape(env.num_envs, -1, env.action_space.shape[0])
+    state_dicts = env.env_method("get_state")
+    trajs = []
+    for state_dict in state_dicts:
+        trajs.append(dict(actions=[], obs=[], collision_state=[], step=[], success=[], info=[]))
+    has_terminated=[False for _ in range(env.num_envs)]
+    try:
+        for step_i in range(horizon):
+            if open_loop:
+                ac = actions[:, step_i]
+            else:
+                # get action from policy
+                ac = policy(ob=ob_dict, goal=goal_dict)
+            pre_ob_dict = ob_dict.copy()
+            # play action
+            ob_dict, r, done, info = env.step(ac)
+
+            # compute reward
+            total_reward += r
+
+            cur_success_metrics = env.env_method("is_success")
+            cur_success_metrics = [{k: bool(s[k]) for k in s} for s in cur_success_metrics]
+            for s, curr_s in zip(success, cur_success_metrics):
+                for k in s:
+                    s[k] = s[k] or curr_s[k]
+            
+            for env_idx, traj in enumerate(trajs):
+                if not has_terminated[env_idx]:
+                    # note this is all before the step 
+                    traj["obs"].append({k: v[env_idx] for k,v in pre_ob_dict.items()})
+                    traj["actions"].append(ac[env_idx])
+                    traj["step"].append(step_i)
+                    # collision state is measured after step, so we are saving pre-collision state
+                    traj["collision_state"].append(info[env_idx]["collided"])
+                    traj['success'].append(success[env_idx])
+                    traj['info'].append(info[env_idx])
+            
+            has_terminated = [has_terminated[i] or done[i] or success[i]['task'] for i in range(env.num_envs)]
+            if resampling_strategy == 'all':
+                for env_idx in range(env.num_envs):
+                    if info[env_idx]['collided']:
+                        has_terminated[env_idx] = True
+            # break if done
+            if all(done) or (terminate_on_success and all([s["task"] for s in success])):
+                break
+    except:
+        print(traceback.format_exc())
+        print("WARNING: got rollout exception")
+
+    for traj in trajs:
+        # only relabel trajectories in which the agent actually collided or failed to reach the goal
+        if traj['info'][-1]['has_collided'] or not traj['success'][-1]['task']:
+            obs = traj['obs']
+            obs = {k: np.array([o[k] for o in obs]) for k in obs[0]}
+            traj['actions'] = np.array(traj['actions'])
+            traj['obs'] = obs   
+            traj['collision_state'] = np.array(traj['collision_state'])
+            traj['step'] = np.array(traj['step'])
+    return trajs
+    
+def replan_from_states(env, trajs, resampling_strategy, num_trajs_to_relabel, dataset, data_grp, online_epoch):
+    relabeling_trajs = []
+    if resampling_strategy == 'collision':
+        for traj in trajs:
+            for i in range(len(traj['obs'])):
+                # TODO: need to pick the state before this (assuming its collision free as well)
+                if traj['collision_state'][i]:
+                    new_traj = dict(
+                        start_config=traj['obs']['current_angles'][i],
+                        goal_config=traj['obs']['goal_angles'][i],
+                        step = traj['step'][i]
+                    )
+                    relabeling_trajs.append(new_traj)
+    elif resampling_strategy == 'random':
+        total_steps = sum([len(traj['obs']) for traj in trajs])
+        step_indices = np.random.choice(total_steps, num_trajs_to_relabel, replace=False)
+        step_idx = 0
+        for traj in trajs:
+            for i in range(len(traj['obs'])):
+                if step_idx in step_indices:
+                    new_traj = dict(
+                        start_config=traj['obs']['current_angles'][i],
+                        goal_config=traj['obs']['goal_angles'][i],
+                        step = traj['step'][i]
+                    )
+                    relabeling_trajs.append(new_traj)
+                step_idx += 1
+    output_trajs = {}
+    total_samples = 0
+    if resampling_strategy == 'all':
+        num_relabels = 0
+        for traj_idx, traj in enumerate(trajs):
+            output_traj = {'actions': [], 'obs': [], 'states':[]}
+            for chunk in range(0, len(traj['obs']['current_angles']), env.num_envs):
+                #NOTE: still running into invalid start state issue, need to debug
+                max_len = min(len(traj['obs']['current_angles']) - chunk, env.num_envs)
+                start_configs = [traj['obs']['current_angles'][i] for i in range(chunk, max_len)]
+                goal_configs = [traj['obs']['goal_angles'][i] for i in range(chunk, max_len)]
+                num_waypoints = [np.maximum(50-traj['step'][i], 5) for i in range(chunk, max_len)]
+                out = env.env_method_pass_idx("finish_traj_with_mp", start_configs, goal_configs, num_waypoints, indices=range(max_len))
+                for env_idx in range(max_len):
+                    env_traj = out[env_idx]
+                    if len(env_traj) > 0:
+                        output_traj['actions'].append(out[env_idx]['actions'][0])
+                        output_traj['obs'].append(out[env_idx]['obs'][0])
+                        output_traj['states'].append(out[env_idx]['states'][0])
+                        num_relabels += 1
+            if len(output_traj['obs']) > 0:
+                # convert to numpy arrays
+                output_traj['actions'] = np.array(output_traj['actions'])
+                output_traj['obs'] = {k: np.array([o[k] for o in output_traj['obs']]) for k in output_traj['obs'][0]}
+                output_traj['states'] = np.array(output_traj['states'])
+                output_traj['num_samples'] = output_traj['actions'].shape[0]
+                output_trajs[f"demo_{online_epoch}_{traj_idx}"] = output_traj
+                total_samples += write_trajectory_to_dataset(None, output_traj, data_grp, f"demo_{online_epoch}_{traj_idx}")
+            if num_relabels > num_trajs_to_relabel:
+                break
+    else:
+        # NOTE: this is adding trajectories completely out of order, will not work with sequence models! only MLP
+        for chunk in range(0, len(relabeling_trajs), env.num_envs):
+            max_len = min(len(relabeling_trajs) - chunk, env.num_envs)
+            chunk_trajs = relabeling_trajs[chunk:max_len]
+            start_configs = [chunk_trajs[i]['start_config'] for i in range(len(chunk_trajs))]
+            goal_configs = [chunk_trajs[i]['goal_config'] for i in range(len(chunk_trajs))]
+            num_waypoints = [np.maximum(50-chunk_trajs[i]['step'], 5) for i in range(len(chunk_trajs))]
+            out = env.env_method_pass_idx("finish_traj_with_mp", start_configs, goal_configs, num_waypoints, indices=range(max_len))
+            traj = {'actions': [], 'obs': [], 'states':[]}
+            for env_idx in range(max_len):
+                env_traj = out[env_idx]
+                if len(env_traj) > 0:
+                    # take first action:
+                    traj['actions'].append(env_traj['actions'][0])
+                    traj['obs'].append(env_traj['obs'][0])
+                    traj['states'].append(env_traj['states'][0])
+            if len(traj['obs']) > 0:
+                # convert to numpy arrays
+                traj['actions'] = np.array(traj['actions'])
+                traj['obs'] = {k: np.array([o[k] for o in traj['obs']]) for k in traj['obs'][0]}
+                traj['states'] = np.array(traj['states'])
+                traj['num_samples'] = traj['actions'].shape[0]
+                total_samples += write_trajectory_to_dataset(None, traj, data_grp, f"demo_{online_epoch}_{chunk}")
+                output_trajs[f"demo_{online_epoch}_{chunk}"] = traj
+    data_grp.attrs["env_args"] = json.dumps(env.env_method("serialize")[0], indent=4)
+    data_grp.attrs["total"] = total_samples
+    # close the hdf5 file
+    dataset.close()
+    return output_trajs
+
+def collect_online_dataset(
+        policy,
+        envs,
+        horizon,
+        use_goals=False,
+        num_episodes=None,
+        render=False,
+        online_epoch=None,
+        terminate_on_success=False,
+        verbose=False,
+        data_writer=None,
+        resampling_strategy='all',
+        num_trajs_to_relabel=100,
+    ):
+    """
+    A helper function used in the train loop to conduct evaluation rollouts per environment
+    and summarize the results.
+
+    Can specify @video_dir (to dump a video per environment) or @video_path (to dump a single video
+    for all environments).
+
+    Args:
+        policy (RolloutPolicy instance): policy to use for rollouts.
+
+        envs (dict): dictionary that maps env_name (str) to EnvBase instance. The policy will
+            be rolled out in each env.
+
+        horizon (int): maximum number of steps to roll the agent out for
+
+        use_goals (bool): if True, agent is goal-conditioned, so provide goal observations from env
+
+        num_episodes (int): number of rollout episodes per environment
+
+        render (bool): if True, render the rollout to the screen
+
+        online_epoch (int): epoch number (used for video naming)
+
+        terminate_on_success (bool): if True, terminate episode early as soon as a success is encountered
+
+        verbose (bool): if True, print results of each rollout
+    
+    Returns:
+        all_rollout_logs (dict): dictionary of rollout statistics (e.g. return, success rate, ...) 
+            averaged across all rollouts 
+
+        video_paths (dict): path to rollout videos for each environment
+    """
+    assert isinstance(policy, RolloutPolicy)
+
+    data_grp = data_writer.create_group("data")
+    for env_name, env in envs.items():
+        env.env_method("set_to_env_sampling")
+        print("rollout: env={}, horizon={}, use_goals={}, num_episodes={}".format(
+            env_name, horizon, use_goals, num_episodes,
+        ))
+        iterator = range(num_episodes)
+        if not verbose:
+            iterator = LogUtils.custom_tqdm(iterator, total=num_episodes)
+
+        dagger_trajs = []
+        for ep_i in iterator:
+            trajs = run_dagger_rollout(
+                policy=policy,
+                env=env,
+                horizon=horizon,
+                use_goals=use_goals,
+                terminate_on_success=terminate_on_success,
+                resampling_strategy=resampling_strategy
+            )
+            dagger_trajs.extend(trajs)
+        data = replan_from_states(
+            env=env,
+            trajs=dagger_trajs,
+            resampling_strategy=resampling_strategy,
+            num_trajs_to_relabel=num_trajs_to_relabel,
+            dataset=data_writer,
+            data_grp=data_grp,
+            online_epoch=online_epoch
+        )
+        env.env_method("set_to_env_original")
+    return data
+        

@@ -120,3 +120,11 @@ class BCConfig(BaseConfig):
         self.algo.loss.collision_loss_params.reduction = "mean"
         self.algo.loss.collision_loss_params.smooth_sdf_loss = "none"
         self.algo.loss.collision_loss_params.compute_loss_on_penetrations_only = False
+        
+        self.experiment.dagger.enabled = False
+        self.experiment.dagger.online_epoch_rate = 50 # how often to run dagger
+        self.experiment.dagger.num_episodes = 10 # this is per env so 10*num_envs overall
+        self.experiment.dagger.resampling_strategy = "all" # all, collision, or random
+        self.experiment.dagger.num_trajs_to_relabel = 1000 # how many trajs to relabel (number of mp calls)
+        
+        
