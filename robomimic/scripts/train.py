@@ -464,7 +464,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                         if k.startswith("Time_"):
                             data_logger.record("Timing_Stats/Rollout_{}_{}".format(env_name, k[5:]), v, epoch)
                         else:
-                            data_logger.record("Rollout/{}/{}".format(k, env_name), v, epoch, log_stats=True)
+                            data_logger.record("Rollout_{}/{}".format(env_name, k), v, epoch, log_stats=True)
 
                     print("\nEpoch {} Rollouts took {}s (avg) with results:".format(epoch, rollout_logs["time"]))
                     print('Env: {}'.format(env_name))

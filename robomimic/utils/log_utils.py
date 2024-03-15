@@ -138,7 +138,7 @@ class DataLogger(object):
                     if log_stats:
                         stats = self.get_stats(k)
                         for (stat_k, stat_v) in stats.items():
-                            self._wandb_logger.log({"{}/{}".format(k, stat_k): stat_v}, step=epoch)
+                            self._wandb_logger.log({"Log_Stats/{}_{}".format(k, stat_k): stat_v}, step=epoch)
                 elif data_type == 'image':
                     raise NotImplementedError
                 elif data_type == 'video':
