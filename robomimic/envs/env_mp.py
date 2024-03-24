@@ -105,8 +105,9 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self.split = None
         self.demos = None
         self.num_envs = 1
+        self.num_resets = 0
     
-    def set_env_specific_params(self, split, env_idx, num_envs):
+    def set_env_specific_params(self, split, num_envs, env_idx):
         """
         Note this sets params for the parallel envs to sample different demonstrations to init from
         This needs to be run before running the env!
@@ -151,7 +152,7 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self._current_reward = reward
         self._current_done = done
         done = self.is_done()
-        trunc = self.is_done() # this is ignored but necessary for gymanasium compatibility
+        trunc = done # this is ignored but necessary for gymanasium compatibility
         if self.num_envs > 1:
             # add dummy (None) values for other splits:
             new_info = {}
@@ -203,21 +204,25 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         if seed is None:
             seed = np.random.randint(0, 10000000)
         np.random.seed(seed)
-        self._current_obs = self.env.reset()
         self._current_reward = None
         self._current_done = self.is_success()
         reset_infos = {} # this is ignored but necessary for gymanasium compatibility
         self.current_step = 0
-        # sample a new demonstration
         if self.demos is not None:
-            ep = np.random.choice(self.demos)
+            # sample a new demonstration
+            idx = self.num_resets % len(self.demos)
+            ep = self.demos[idx]
             self.states = self.hdf5_file["data/{}/states".format(ep)][()]
             self.plan = self.hdf5_file["data/{}/actions".format(ep)][()]
             self.total_action_err = 0
             self.total_action_mse = 0
+            print("resetting to demo: {}, idx: {}".format(ep, idx))
+            self.num_resets += 1
             return self.reset_to({"states": self.states[0]}), reset_infos
         else:
+            self._current_obs = self.env.reset()
             return self.get_observation(self._current_obs), reset_infos
+        
     
     def set_to_env_sampling(self):
         """

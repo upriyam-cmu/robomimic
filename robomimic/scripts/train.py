@@ -163,7 +163,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                         else:
                             split = None
                         num_split_envs = 5 # because each split has 5 envs (for train and val)
-                        env.env_method("set_env_specific_params", split, env_idx, num_split_envs, indices=[env_idx])
+                        env.env_method_pass_idx("set_env_specific_params", split, num_split_envs, indices=[env_idx])
                 else:
                     env = DummyVecEnv([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)])
 
