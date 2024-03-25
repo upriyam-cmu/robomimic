@@ -52,10 +52,20 @@ class SubprocVecEnvWrapper(SubprocVecEnv):
     def env_method_pass_idx(self, method_name: str, *method_args, indices = None, **method_kwargs):
         """Call instance methods of vectorized environments."""
         target_remotes = self._get_target_remotes(indices)
-        for env_idx, remote in enumerate(target_remotes):
-            method_kwargs['env_idx'] = env_idx
+        for idx, remote in zip(indices, target_remotes):
+            method_kwargs['env_idx'] = idx
             remote.send(("env_method", (method_name, method_args, method_kwargs)))
         return [remote.recv() for remote in target_remotes]
+
+class DummyVecEnvWrapper(DummyVecEnv):
+    def env_method_pass_idx(self, method_name: str, *method_args, indices = None, **method_kwargs):
+        """Call instance methods of vectorized environments."""
+        target_envs = self._get_target_envs(indices)
+        out = []
+        for idx, env in zip(indices, target_envs):
+            method_kwargs['env_idx'] = idx
+            out.append(getattr(env, method_name)(*method_args, **method_kwargs))
+        return out
 
 def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, dataset_path):
     env_meta['env_kwargs']['dataset_path'] = dataset_path
@@ -165,7 +175,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                         num_split_envs = 5 # because each split has 5 envs (for train and val)
                         env.env_method_pass_idx("set_env_specific_params", split, num_split_envs, indices=[env_idx])
                 else:
-                    env = DummyVecEnv([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)])
+                    env = DummyVecEnvWrapper([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)])
 
                 envs[env_name] = env
                 print(envs[env_name])

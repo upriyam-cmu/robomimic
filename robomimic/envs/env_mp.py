@@ -281,6 +281,82 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
             return traj
         else:
             return {}
+    
+    def relabel_traj_with_mp(self, trajs, env_idx):
+        """
+        Relabel all actions in a trajectory with motion planning.
+        This is used for DAgger, so we will re-plan from every successive state in the trajectory.
+        The key trick is that we re-use the search tree across planner calls so after the first call,
+        the planning is much faster.
+        NOTE: we assume all trajs contain a collision state and are of length << 50.
+        We also only relabel until the first collision state.
+        Args:
+            trajs (_type_): _description_
+            env_idx (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        actions = []
+        states = []
+        cfg = self.env.cfg
+        traj = trajs[env_idx]
+        start_config = traj['obs']['current_angles'][0]
+        goal_config = traj['obs']['goal_angles'][0] #will be const. throughout traj
+        self.env.set_robot_joint_state(start_config)
+        mp_kwargs = cfg.task.mp_kwargs.copy()
+        plan, _, plan_obs, planning_states, planner, pdef = self.env.mp_to_joint_target(
+            goal_config, **mp_kwargs
+        )
+        if plan is not None:
+            # TODO: make it re-try till it works or max retries
+            plan = np.array(plan)
+            current_configs = plan[:-1, :]  # remove the goal state from the current configs
+            plan = plan[1:, :]  # remove the start state from the predicted waypoints
+            if cfg.data.convert_plan_to_delta:
+                plan = plan - current_configs
+            else:
+                plan = self.env.normalize_franka_joints(plan)
+            actions.append(plan[0])
+            states.append(planning_states[0])
+            for step in range(1, len(traj['obs']['current_angles'])):
+                mp_kwargs_ = mp_kwargs.copy()
+                self.env.set_robot_joint_state(traj['obs']['current_angles'][step])
+                mp_kwargs_['planning_time'] = 0.001
+                mp_kwargs_['num_waypoints'] = max(50-step, 2)
+                plan, _, _, planning_states, planner, pdef = self.env.mp_to_joint_target(
+                    goal_config, planner=planner, pdef=pdef, **mp_kwargs_
+                )
+                # assumption: if original plan successful, can re-plan easily from other states
+                if plan is None:
+                    print("Failed to re-plan at step: {}".format(step))
+                    break
+                plan = np.array(plan)
+                current_configs = plan[:-1, :]  # remove the goal state from the current configs
+                plan = plan[1:, :]  # remove the start state from the predicted waypoints
+                if cfg.data.convert_plan_to_delta:
+                    plan = plan - current_configs
+                else:
+                    plan = self.env.normalize_franka_joints(plan)
+                actions.append(plan[0])
+                states.append(planning_states[0])
+                # check if it has collided, if so break
+                if traj['collision_state'][step]:
+                    break        
+            # shorten obs to same length as actions
+            obs = {k:v[:len(actions)] for k, v in traj['obs'].items()}  
+            states = np.array(states).astype(np.float32)
+            actions = np.array(actions).astype(np.float32) 
+            output_traj = {
+                'actions': actions, 
+                'obs': obs, 
+                'states': states, 
+                'num_samples': len(actions)
+            }
+            return output_traj
+        else:
+            return {}
+        
 
     def reset_to(self, state):
         """

@@ -684,7 +684,7 @@ def run_dagger_rollout(
     state_dicts = env.env_method("get_state")
     trajs = []
     for state_dict in state_dicts:
-        trajs.append(dict(actions=[], obs=[], collision_state=[], step=[], success=[], info=[]))
+        trajs.append(dict(obs=[], collision_state=[], step=[], success=[], info=[]))
     has_terminated=[False for _ in range(env.num_envs)]
     try:
         for step_i in range(horizon):
@@ -710,10 +710,9 @@ def run_dagger_rollout(
                 if not has_terminated[env_idx]:
                     # note this is all before the step 
                     traj["obs"].append({k: v[env_idx] for k,v in pre_ob_dict.items()})
-                    traj["actions"].append(ac[env_idx])
                     traj["step"].append(step_i)
                     # collision state is measured after step, so we are saving pre-collision state
-                    traj["collision_state"].append(info[env_idx]["collided"])
+                    traj["collision_state"].append(info[env_idx]["collided_1_cm"])
                     traj['success'].append(success[env_idx])
                     traj['info'].append(info[env_idx])
             
@@ -734,7 +733,6 @@ def run_dagger_rollout(
         if traj['info'][-1]['has_collided'] or not traj['success'][-1]['task']:
             obs = traj['obs']
             obs = {k: np.array([o[k] for o in obs]) for k in obs[0]}
-            traj['actions'] = np.array(traj['actions'])
             traj['obs'] = obs   
             traj['collision_state'] = np.array(traj['collision_state'])
             traj['step'] = np.array(traj['step'])
@@ -771,30 +769,16 @@ def replan_from_states(env, trajs, resampling_strategy, num_trajs_to_relabel, da
     total_samples = 0
     if resampling_strategy == 'all':
         num_relabels = 0
-        for traj_idx, traj in enumerate(trajs):
-            output_traj = {'actions': [], 'obs': [], 'states':[]}
-            for chunk in range(0, len(traj['obs']['current_angles']), env.num_envs):
-                #NOTE: still running into invalid start state issue, need to debug
-                max_len = min(len(traj['obs']['current_angles']) - chunk, env.num_envs)
-                start_configs = [traj['obs']['current_angles'][i] for i in range(chunk, max_len)]
-                goal_configs = [traj['obs']['goal_angles'][i] for i in range(chunk, max_len)]
-                num_waypoints = [np.maximum(50-traj['step'][i], 5) for i in range(chunk, max_len)]
-                out = env.env_method_pass_idx("finish_traj_with_mp", start_configs, goal_configs, num_waypoints, indices=range(max_len))
-                for env_idx in range(max_len):
-                    env_traj = out[env_idx]
-                    if len(env_traj) > 0:
-                        output_traj['actions'].append(out[env_idx]['actions'][0])
-                        output_traj['obs'].append(out[env_idx]['obs'][0])
-                        output_traj['states'].append(out[env_idx]['states'][0])
-                        num_relabels += 1
-            if len(output_traj['obs']) > 0:
-                # convert to numpy arrays
-                output_traj['actions'] = np.array(output_traj['actions'])
-                output_traj['obs'] = {k: np.array([o[k] for o in output_traj['obs']]) for k in output_traj['obs'][0]}
-                output_traj['states'] = np.array(output_traj['states'])
-                output_traj['num_samples'] = output_traj['actions'].shape[0]
-                output_trajs[f"demo_{online_epoch}_{traj_idx}"] = output_traj
-                total_samples += write_trajectory_to_dataset(None, output_traj, data_grp, f"demo_{online_epoch}_{traj_idx}")
+        for chunk in range(0, len(trajs), env.num_envs):
+            max_len = min(len(trajs) - chunk, env.num_envs)
+            chunk_trajs = trajs[chunk:max_len]
+            out = env.env_method_pass_idx("relabel_traj_with_mp", chunk_trajs, indices=range(max_len))
+            for env_idx in range(max_len):
+                env_traj = out[env_idx]
+                if len(env_traj) > 0:
+                    output_trajs[f"demo_{online_epoch}_{chunk+env_idx}"] = env_traj
+                    total_samples += write_trajectory_to_dataset(None, env_traj, data_grp, f"demo_{online_epoch}_{chunk+env_idx}")
+                    num_relabels += 1
             if num_relabels > num_trajs_to_relabel:
                 break
     else:
