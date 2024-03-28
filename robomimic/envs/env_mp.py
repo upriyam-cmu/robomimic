@@ -550,6 +550,12 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         Get environment configuration.
         """
         return self.env.cfg
+    
+    def get_valid_scene(self):
+        """
+        Get a valid scene for the environment.
+        """
+        return self.env.get_valid_scene()
 
 def render_pointcloud(pcd):
     device = torch.device("cuda:0")
