@@ -168,11 +168,13 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                     for env_idx in range(config.experiment.num_envs):
                         if env_idx < 5:
                             split = 'train'
+                            num_split_envs = 5 # because each split has 5 envs (for train and val)
                         elif env_idx < 10:
                             split = 'valid'
+                            num_split_envs = 5 # because each split has 5 envs (for train and val)
                         else:
                             split = None
-                        num_split_envs = 5 # because each split has 5 envs (for train and val)
+                            num_split_envs = config.experiment.num_envs - 10
                         env.env_method_pass_idx("set_env_specific_params", split, num_split_envs, indices=[env_idx])
                 else:
                     env = DummyVecEnvWrapper([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)])

@@ -106,6 +106,7 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self.demos = None
         self.num_envs = 1
         self.num_resets = 0
+        self.initial_states = None
     
     def set_env_specific_params(self, split, num_envs, env_idx):
         """
@@ -132,6 +133,13 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
             print("env idx: {}, split: {}, demos: {}".format(env_idx, split, len(self.demos)))
         else:
             self.demos = None
+            import neural_mp
+            neural_mp_path = os.path.dirname(neural_mp.__file__)[:-len("neural_mp")]
+            self.initial_states = os.path.join(neural_mp_path, f'init_states/{self.env.cfg.task.env_name}.npy')
+            self.initial_states = np.load(self.initial_states, allow_pickle=True)
+            env_idx = env_idx - num_envs
+            self.initial_states = [self.initial_states[i]['states'] for i in range(len(self.initial_states)) if i % num_envs == env_idx]
+            print("env idx: {}, split: {}, initial states: {}".format(env_idx, split, len(self.initial_states)))
         self.num_envs = num_envs
 
     def step(self, action):
@@ -219,6 +227,11 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
             print("resetting to demo: {}, idx: {}".format(ep, idx))
             self.num_resets += 1
             return self.reset_to({"states": self.states[0]}), reset_infos
+        elif self.initial_states is not None:
+            idx = self.num_resets % len(self.initial_states)
+            print("resetting to initial state idx: {}".format(idx))
+            self.num_resets += 1
+            return self.reset_to({"states": self.initial_states[idx]}), reset_infos
         else:
             self._current_obs = self.env.reset()
             return self.get_observation(self._current_obs), reset_infos
@@ -556,6 +569,12 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         Get a valid scene for the environment.
         """
         return self.env.get_valid_scene()
+    
+    def seed(self, seed):
+        """
+        Seed the environment.
+        """
+        np.random.seed(seed)
 
 def render_pointcloud(pcd):
     device = torch.device("cuda:0")
