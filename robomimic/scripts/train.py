@@ -446,6 +446,19 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                 trainset.update_demo_info(
                     list(data.keys()), online_epoch, data, hdf5_file=data_writer
                 )
+                # reload the dataloader
+                train_loader = DataLoader(
+                    dataset=trainset,
+                    sampler=train_sampler,
+                    batch_size=config.train.batch_size,
+                    shuffle=(train_sampler is None),
+                    num_workers=config.train.num_data_workers,
+                    drop_last=True,
+                    pin_memory=True,
+                    persistent_workers=True if config.train.num_data_workers > 0 else False,
+                )
+                data_writer.close()
+                
             video_paths = None
             rollout_check = (epoch % config.experiment.rollout.rate == 0) or (should_save_ckpt and ckpt_reason == "time")
             if config.experiment.rollout.enabled and (epoch > config.experiment.rollout.warmstart) and rollout_check:

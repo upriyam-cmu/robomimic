@@ -30,7 +30,7 @@
             "enabled": true,
             "n": 50,
             "horizon": 150,
-            "rate": 50,
+            "rate": 250,
             "warmstart": 0,
             "terminate_on_success": true
         },
@@ -43,10 +43,10 @@
         "num_envs": 20,
         "dagger": {
             "enabled": true,
-            "online_epoch_rate": 50,
-            "num_episodes": 1000,
+            "online_epoch_rate": 25,
+            "num_episodes": 100,
             "resampling_strategy": "all",
-            "num_trajs_to_relabel": 1000
+            "num_trajs_to_relabel": 2000
         }
     },
     "train": {

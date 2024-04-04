@@ -259,7 +259,7 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self.env.set_robot_joint_state(start_config)
         mp_kwargs = self.env.cfg.task.mp_kwargs.copy()
         mp_kwargs['num_waypoints'] = int(num_waypoints)
-        plan, _, plan_obs, planning_states = self.env.mp_to_joint_target(
+        plan, _, plan_obs, planning_states, _, _, _ = self.env.mp_to_joint_target(
             goal_config, **mp_kwargs
         )
         obs = self.get_observation()
@@ -315,10 +315,10 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         cfg = self.env.cfg
         traj = trajs[env_idx]
         start_config = traj['obs']['current_angles'][0]
-        goal_config = traj['obs']['goal_angles'][0] #will be const. throughout traj
+        goal_config = traj['obs']['goal_angles'][0] # will be const. throughout traj
         self.env.set_robot_joint_state(start_config)
         mp_kwargs = cfg.task.mp_kwargs.copy()
-        plan, _, plan_obs, planning_states, planner, pdef = self.env.mp_to_joint_target(
+        plan, _, plan_obs, planning_states, planner, pdef, _ = self.env.mp_to_joint_target(
             goal_config, **mp_kwargs
         )
         if plan is not None:
@@ -337,7 +337,7 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
                 self.env.set_robot_joint_state(traj['obs']['current_angles'][step])
                 mp_kwargs_['planning_time'] = 0.001
                 mp_kwargs_['num_waypoints'] = max(50-step, 2)
-                plan, _, _, planning_states, planner, pdef = self.env.mp_to_joint_target(
+                plan, _, _, planning_states, planner, pdef, _ = self.env.mp_to_joint_target(
                     goal_config, planner=planner, pdef=pdef, **mp_kwargs_
                 )
                 # assumption: if original plan successful, can re-plan easily from other states
