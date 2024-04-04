@@ -60,31 +60,40 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
 
     generator.add_param(
         key="train.data",
-        name="",
+        name="ds",
         group=1,
         values=[
-            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_true.hdf5",
+            "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_True_controller_col_check_dist_1cm_p_time_20s_many_bugfixes.hdf5",
+            # "/home/mdalal/research/neural_mp/neural_mp/datasets/table_1M_pcd_params_obs_delta_False_controller_col_check_dist_1cm_p_time_20s_many_bugfixes.hdf5"
         ],
         value_names=[
-            "table_1M_pcd_params_obs_delta_true",
+            "delta_True",
+            # "delta_False",
         ]
     )
 
+    generator.add_param(
+        key="experiment.pcd_params.relabel_goal_angles",
+        name="rga",
+        group=2,
+        values=[True, False],
+    )
+
     # generator.add_param(
-    #    key="train.batch_size",
-    #    name="bs", 
-    #    group=2, 
-    # #    values=[128],
-    #    values=[64],
-    # #    values=[16],
+    #     key="train.batch_size",
+    #     name="bs", 
+    #     group=2, 
+    #  #    values=[128],
+    #     values=[128],
+    #  #    values=[16],
     # )
 
     # generator.add_param(
-    #    key="algo.optim_params.policy.learning_rate.initial", 
-    #    name="plr", 
-    #    group=3, 
-    #    values=[1e-3], 
-    # #    values=[1e-4], 
+    #     key="algo.optim_params.policy.learning_rate.initial", 
+    #     name="plr", 
+    #     group=3, 
+    #     values=[1e-4, 5e-4, 1e-3], 
+    #  #    values=[1e-4], 
     # )
 
     # generator.add_param(
@@ -95,27 +104,27 @@ def make_generator(config_file, script_file, wandb_proj_name, output_dir):
     #     # values=['small'], 
     # )
     
-    generator.add_param(
-        key="algo.loss.collision_weight",
-        name="cw",
-        group=5,
-        # values=[1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7],
-        values=[0.0, 1.0, 1e1, 1e2],
-    )
+    # generator.add_param(
+    #     key="algo.loss.collision_weight",
+    #     name="cw",
+    #     group=5,
+    #     # values=[1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7],
+    #     values=[0.0, 1.0, 1e1, 1e2],
+    # )
     
-    generator.add_param(
-        key="algo.loss.collision_loss_params.hinge_loss",
-        name="",
-        group=4,
-        values=[False],
-    )
+    # generator.add_param(
+    #     key="algo.loss.collision_loss_params.hinge_loss",
+    #     name="",
+    #     group=4,
+    #     values=[False],
+    # )
     
-    generator.add_param(
-        key="algo.loss.collision_loss_params.reduction",
-        name="red",
-        group=6,
-        values=["mean", "sum", "max"],
-    )
+    # generator.add_param(
+    #     key="algo.loss.collision_loss_params.reduction",
+    #     name="red",
+    #     group=6,
+    #     values=["mean", "sum", "max"],
+    # )
     
     # generator.add_param(
     #     key="algo.loss.collision_loss_params.margin",

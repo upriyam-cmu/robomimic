@@ -127,6 +127,7 @@ class BaseConfig(Config):
         self.experiment.pcd_params.target_pcd_type = 'joint'
         self.experiment.pcd_params.noise_scale = 0.0
         self.experiment.pcd_params.normalize_joint_angles = False
+        self.experiment.pcd_params.relabel_goal_angles = False
         self.experiment.num_envs = 1
 
     def train_config(self):

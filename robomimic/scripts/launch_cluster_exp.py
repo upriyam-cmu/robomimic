@@ -42,16 +42,18 @@ def get_exp_dir(config, auto_remove_exp_dir=False):
 
 slurm_additional_parameters = {
     "name": "",
-    "slurm_partition": "all",
-    "timeout_min": 60 * 6,
+    # "slurm_partition": "all",
+    "slurm_partition": "deepaklong",
+    # "timeout_min": 60 * 6,
+    "timeout_min": 60 * 48,
     "mem_gb": 62,
     "nodes": 1,
-    "cpus_per_task": 8,
+    "cpus_per_task": 20,
     "slurm_gres": "gpu:1",
     "tasks_per_node": 1,
     "slurm_signal_delay_s": 120,
     # "slurm_exclude": "grogu-1-14, grogu-1-19, grogu-0-24, grogu-1-[9,24,29], grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000
-    "slurm_exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
+    #"slurm_exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29", # 5000/6000 + 2080, 3080
     # "slurm_exclude": "grogu-3-[1,3,5,9,11,25,27], grogu-3-[15,17,19,21,23], grogu-3-29, grogu-1-3, grogu-0-19, grogu-1-40", # 2080, 3080
 }
 
@@ -91,7 +93,7 @@ class WrappedCallable(submitit.helpers.Checkpointable):
         if checkpoint_path is not None:
             output_dir = None # get output_dir from ckpt
         cmd = f"{singularity_path} exec --nv {self.sif_path} {self.python_path} {self.file_path} --config {self.config_path} \
-            --output_dir {output_dir} --agent {checkpoint_path}"
+            --output_dir {output_dir} --agent {checkpoint_path} --slurm"
         if self.start_from_checkpoint:
             cmd += " --start_from_checkpoint"
         if self.ddp:

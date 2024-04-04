@@ -573,6 +573,15 @@ def main(rank, args):
 
     if args.name is not None:
         config.experiment.name = args.name
+    
+    if args.slurm:
+        # check if the dataset is in /scratch/mdalal/dataset_name
+        dataset_name = config.train.data.split('/')[-1]
+        os.makedirs("/scratch/mdalal", exist_ok=True)
+        if not os.path.exists(f"/scratch/mdalal/{dataset_name}"):
+            # copy the dataset to /scratch/mdalal
+            shutil.copyfile(config.train.data, f"/scratch/mdalal/{dataset_name}")
+            config.train.data = f"/scratch/mdalal/{dataset_name}"
 
     # get torch device
     device = TorchUtils.get_torch_device(try_to_use_cuda=config.train.cuda, rank=rank)
@@ -687,6 +696,12 @@ if __name__ == "__main__":
         type=int,
         default=1,
         help="number of gpus to use for distributed data parallel"
+    )
+    
+    parser.add_argument(
+        "--slurm",
+        action='store_true',
+        help="set this flag to run on slurm"
     )
     args = parser.parse_args()
 

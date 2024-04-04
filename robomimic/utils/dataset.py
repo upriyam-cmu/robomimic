@@ -556,6 +556,23 @@ class SequenceDataset(torch.utils.data.Dataset):
             obs['current_angles'] = np.clip(obs['current_angles'], FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS)
         if 'compute_pcd_params' in obs:
             obs['compute_pcd_params'][:, :7] = obs['current_angles']
+        if 'goal_angles' in obs and self.pcd_params['relabel_goal_angles']:
+            # sample goal as a future obs (HER style relabeling)
+            demo_length = self._demo_id_to_demo_length[demo_id]
+            start_index = min(demo_length-1, index_in_demo+1)
+            goal_index = np.random.randint(start_index, demo_length)
+            goal_obs, _ = self.get_sequence_from_demo(
+                demo_id,
+                index_in_demo=goal_index,
+                keys=tuple('{}/{}'.format(prefix, k) for k in keys),
+                num_frames_to_stack=1,
+                seq_length=1,
+            )
+            goal_obs = {k.split('/')[1]: goal_obs[k] for k in goal_obs}  # strip the prefix
+            goal_angles = goal_obs['current_angles'][0]
+            # repeat to match obs['current_angles'] shape
+            goal_angles = np.repeat(goal_angles[None, :], obs['current_angles'].shape[0], axis=0)
+            obs['goal_angles'] = goal_angles
         compute_pcd_params_saved = None
         for k in obs:
             if 'pcd' in k:
