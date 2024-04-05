@@ -24,8 +24,9 @@ from robomimic.algo import register_algo_factory_func, PolicyAlgo
 import neural_mp.utils.mpinets_loss as loss
 
 # convert limits to torch.Tensor
-FRANKA_LOWER_LIMITS = torch.tensor(FRANKA_LOWER_LIMITS, dtype=torch.float32).cuda()
-FRANKA_UPPER_LIMITS = torch.tensor(FRANKA_UPPER_LIMITS, dtype=torch.float32).cuda()
+FRANKA_LOWER_LIMITS = torch.tensor(FRANKA_LOWER_LIMITS, dtype=torch.float32)
+FRANKA_UPPER_LIMITS = torch.tensor(FRANKA_UPPER_LIMITS, dtype=torch.float32)
+
 @register_algo_factory_func("bc")
 def algo_config_to_class(algo_config):
     """
