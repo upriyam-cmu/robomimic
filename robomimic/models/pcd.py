@@ -162,7 +162,7 @@ class MPiNetsPointNet(pl.LightningModule):
                                               This tensor must be on the GPU (CPU tensors not supported)
         :rtype torch.Tensor: The output from the network
         """
-        assert point_cloud.size(2) == 4
+        assert point_cloud.size(-1) == 4
         xyz, features = self._break_up_pc(point_cloud)
         for module in self.SA_modules:
             xyz, features = module(xyz, features)

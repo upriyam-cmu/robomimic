@@ -3,6 +3,7 @@ A collection of useful environment wrappers.
 """
 from copy import deepcopy
 import textwrap
+import gymnasium
 import numpy as np
 from collections import deque
 
@@ -12,7 +13,7 @@ import torch
 
 from robofin.pointcloud.torch import FrankaSampler
 
-class EnvWrapper(object):
+class EnvWrapper(gymnasium.Env):
     """
     Base class for all environment wrappers in robomimic.
     """
@@ -115,7 +116,14 @@ class FrameStackWrapper(EnvWrapper):
 
         super(FrameStackWrapper, self).__init__(env=env)
         self.num_frames = num_frames
-
+        # add a timestep dim to the observation space 
+        for k in self.env.observation_space.spaces:
+            self.env.observation_space[k] = gymnasium.spaces.Box(
+                low=np.expand_dims(self.env.observation_space.spaces[k].low, axis=0).repeat(self.num_frames, axis=0),
+                high=np.expand_dims(self.env.observation_space.spaces[k].high, axis=0).repeat(self.num_frames, axis=0),
+                shape=(self.num_frames,) + self.env.observation_space.spaces[k].shape,
+                dtype=self.env.observation_space.spaces[k].dtype,
+            )
         # keep track of last @num_frames observations for each obs key
         self.obs_history = None
 
@@ -152,7 +160,7 @@ class FrameStackWrapper(EnvWrapper):
         self.obs_history = self.obs_history_cache
         self.obs_history_cache = None
 
-    def reset(self):
+    def reset(self, seed=None):
         """
         Modify to return frame stacked observation which is @self.num_frames copies of 
         the initial observation.
@@ -162,11 +170,11 @@ class FrameStackWrapper(EnvWrapper):
                 leading shape @self.num_frames and consists of the previous @self.num_frames
                 observations
         """
-        obs = self.env.reset()
+        obs, reset_info = self.env.reset()
         self.timestep = 0  # always zero regardless of timestep type
         self.update_obs(obs, reset=True)
         self.obs_history = self._get_initial_obs_history(init_obs=obs)
-        return self._get_stacked_obs_from_history()
+        return self._get_stacked_obs_from_history(), reset_info
 
     def reset_to(self, state):
         """
@@ -200,14 +208,14 @@ class FrameStackWrapper(EnvWrapper):
             done (bool): whether the task is done
             info (dict): extra information
         """
-        obs, r, done, info = self.env.step(action)
+        obs, r, done, trunc, info = self.env.step(action)
         self.update_obs(obs, action=action, reset=False)
         # update frame history
         for k in obs:
             # make sure to have leading dim of 1 for easy concatenation
             self.obs_history[k].append(obs[k][None])
         obs_ret = self._get_stacked_obs_from_history()
-        return obs_ret, r, done, info
+        return obs_ret, r, done, trunc, info
 
     def update_obs(self, obs, action=None, reset=False):
         obs["timesteps"] = np.array([self.timestep])
@@ -221,6 +229,9 @@ class FrameStackWrapper(EnvWrapper):
     def _to_string(self):
         """Info to pretty print."""
         return "num_frames={}".format(self.num_frames)
+
+    def render(self, **kwargs):
+        return self.env.render(**kwargs)
 
 class EvaluateOnDatasetWrapper(EnvWrapper):
     def __init__(self, env, dataset_path, filter_key="valid"):
@@ -316,6 +327,8 @@ class EvaluateOnDatasetWrapper(EnvWrapper):
         o, r, d, i = self.env.step(action)
         self.timestep += 1
         return o, r, d, i
+
+
     
 class ResampleGoalPCDWrapper(EnvWrapper):
     def __init__(self, env, num_robot_points=2048):
