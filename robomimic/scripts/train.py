@@ -159,6 +159,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                 pcd_params = config.experiment.pcd_params.to_dict()
                 mpinets_enabled = config.algo.mpinets.enabled
                 render_video = config.experiment.render_video
+                env_meta['env_kwargs']['cfg']['task']['setup_cameras'] = True # set up cameras for rendering
                 if config.experiment.num_envs > 1:
                     env_fns = []
                     for env_idx in range(config.experiment.num_envs):
