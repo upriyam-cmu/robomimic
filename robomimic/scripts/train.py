@@ -246,7 +246,8 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         try:
             num_enc_params = sum(p.numel() for p in model.nets['policy'].model.nets['encoder'].parameters())
         except:
-            num_enc_params = sum(p.numel() for p in model.nets['policy'].model['obs_encoder'].module.nets['obs'].parameters())
+            # this is for diffusion policy
+            num_enc_params = sum(p.numel() for p in model.nets['policy'].model['obs_encoder'].nets['obs'].parameters())
     print("Policy params: ", format_parameters(num_policy_params))
     print("encoder params: ", format_parameters(num_enc_params))
 

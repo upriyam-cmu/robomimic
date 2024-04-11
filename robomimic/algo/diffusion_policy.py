@@ -30,6 +30,7 @@ import robomimic.utils.obs_utils as ObsUtils
 import os
 
 
+from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
 lang_model = AutoModel.from_pretrained("distilbert-base-uncased", torch_dtype=torch.float16)
@@ -95,8 +96,8 @@ class DiffusionPolicyUNet(PolicyAlgo):
         # the final arch has 2 parts
         nets = nn.ModuleDict({
             'policy': nn.ModuleDict({
-                'obs_encoder': torch.nn.parallel.DataParallel(obs_encoder, device_ids=list(range(0,torch.cuda.device_count()))),
-                'noise_pred_net': torch.nn.parallel.DataParallel(noise_pred_net, device_ids=list(range(0,torch.cuda.device_count())))
+                'obs_encoder': obs_encoder,
+                'noise_pred_net': noise_pred_net,
             })
         })
 
@@ -218,7 +219,6 @@ class DiffusionPolicyUNet(PolicyAlgo):
         action_dim = self.ac_dim
         B = batch['actions'].shape[0]
 
-        
         with TorchUtils.maybe_no_grad(no_grad=validate):
             info = super(DiffusionPolicyUNet, self).train_on_batch(batch, epoch, validate=validate)
             actions = batch['actions']
@@ -236,7 +236,6 @@ class DiffusionPolicyUNet(PolicyAlgo):
             obs_features = TensorUtils.time_distributed({"obs":inputs["obs"]}, self.nets['policy'].model['obs_encoder'], inputs_as_kwargs=True)
             assert obs_features.ndim == 3  # [B, T, D]
             obs_cond = obs_features.flatten(start_dim=1)
-
             num_noise_samples = self.algo_config.noise_samples
 
             # sample noise to add to actions
@@ -335,37 +334,6 @@ class DiffusionPolicyUNet(PolicyAlgo):
         To = self.algo_config.horizon.observation_horizon
         Ta = self.algo_config.horizon.action_horizon
 
-        if eval_mode:
-            from droid.misc.parameters import hand_camera_id, varied_camera_1_id, varied_camera_2_id
-            root_path = os.path.join(os. getcwd(), "eval_params")
-
-            if goal_mode is not None:
-                # Read in goal images
-                goal_hand_camera_left_image = torch.FloatTensor((cv2.cvtColor(cv2.imread(os.path.join(root_path, f"{hand_camera_id}_left.png")), cv2.COLOR_BGR2RGB) / 255.0)).cuda().permute(2, 0, 1).unsqueeze(0).repeat([1, 1, 1, 1]).unsqueeze(0)
-                goal_hand_camera_right_image = torch.FloatTensor((cv2.cvtColor(cv2.imread(os.path.join(root_path, f"{hand_camera_id}_right.png")), cv2.COLOR_BGR2RGB) / 255.0)).cuda().permute(2, 0, 1).unsqueeze(0).repeat([1, 1, 1, 1]).unsqueeze(0)
-                goal_varied_camera_1_left_image = torch.FloatTensor((cv2.cvtColor(cv2.imread(os.path.join(root_path, f"{varied_camera_1_id}_left.png")), cv2.COLOR_BGR2RGB) / 255.0)).cuda().permute(2, 0, 1).unsqueeze(0).repeat([1, 1, 1, 1]).unsqueeze(0)
-                goal_varied_camera_1_right_image = torch.FloatTensor((cv2.cvtColor(cv2.imread(os.path.join(root_path, f"{varied_camera_1_id}_right.png")), cv2.COLOR_BGR2RGB) / 255.0)).cuda().permute(2, 0, 1).unsqueeze(0).repeat([1, 1, 1, 1]).unsqueeze(0)
-                goal_varied_camera_2_left_image = torch.FloatTensor((cv2.cvtColor(cv2.imread(os.path.join(root_path, f"{varied_camera_2_id}_left.png")), cv2.COLOR_BGR2RGB) / 255.0)).cuda().permute(2, 0, 1).unsqueeze(0).repeat([1, 1, 1, 1]).unsqueeze(0)
-                goal_varied_camera_2_right_image = torch.FloatTensor((cv2.cvtColor(cv2.imread(os.path.join(root_path, f"{varied_camera_2_id}_right.png")), cv2.COLOR_BGR2RGB) / 255.0)).cuda().permute(2, 0, 1).unsqueeze(0).repeat([1, 1, 1, 1]).unsqueeze(0)
-
-                obs_dict['camera/image/hand_camera_left_image'] = torch.cat([obs_dict['camera/image/hand_camera_left_image'], goal_hand_camera_left_image.repeat(1, To, 1, 1, 1)], dim=2) 
-                obs_dict['camera/image/hand_camera_right_image'] = torch.cat([obs_dict['camera/image/hand_camera_right_image'], goal_hand_camera_right_image.repeat(1, To, 1, 1, 1)], dim=2) 
-                obs_dict['camera/image/varied_camera_1_left_image'] = torch.cat([obs_dict['camera/image/varied_camera_1_left_image'], goal_varied_camera_1_left_image.repeat(1, To, 1, 1, 1)], dim=2) 
-                obs_dict['camera/image/varied_camera_1_right_image'] = torch.cat([obs_dict['camera/image/varied_camera_1_right_image'] , goal_varied_camera_1_right_image.repeat(1, To, 1, 1, 1)], dim=2) 
-                obs_dict['camera/image/varied_camera_2_left_image'] = torch.cat([obs_dict['camera/image/varied_camera_2_left_image'] , goal_varied_camera_2_left_image.repeat(1, To, 1, 1, 1)], dim=2) 
-                obs_dict['camera/image/varied_camera_2_right_image'] = torch.cat([obs_dict['camera/image/varied_camera_2_right_image'], goal_varied_camera_2_right_image.repeat(1, To, 1, 1, 1)], dim=2) 
-            # Note: currently assumes that you are never doing both goal and language conditioning
-            else:
-                # Reads in current language instruction from file and fills the appropriate obs key, only will
-                # actually use it if the policy uses language instructions
-                with open(os.path.join(root_path, "lang_command.txt"), 'r') as file:
-                    raw_lang = file.read()
-
-                encoded_input = tokenizer(raw_lang, return_tensors='pt').to('cuda')
-                outputs = lang_model(**encoded_input)
-                encoded_lang = outputs.last_hidden_state.sum(1).squeeze().unsqueeze(0).repeat(To, 1).unsqueeze(0)
-                obs_dict["lang_fixed/language_distilbert"] = encoded_lang.type(torch.float32)
-
         ###############################
 
         # TODO: obs_queue already handled by frame_stack
@@ -387,14 +355,11 @@ class DiffusionPolicyUNet(PolicyAlgo):
             action_sequence = self._get_action_trajectory(obs_dict=obs_dict)
             
             # put actions into the queue
-            self.action_queue.extend(action_sequence[0])
-        
+            self.action_queue.extend(action_sequence.transpose(0, 1))
         # has action, execute from left to right
-        # [Da]
+        # [B, Da]
         action = self.action_queue.popleft()
         
-        # [1,Da]
-        action = action.unsqueeze(0)
         return action
         
     def _get_action_trajectory(self, obs_dict):
@@ -425,7 +390,7 @@ class DiffusionPolicyUNet(PolicyAlgo):
                 continue
             # first two dimensions should be [B, T] for inputs
             # assert inputs['obs'][k].ndim - 2 == len(self.obs_shapes[k])
-        obs_features = TensorUtils.time_distributed({"obs":inputs["obs"]}, nets['policy']['obs_encoder'].module, inputs_as_kwargs=True)
+        obs_features = TensorUtils.time_distributed({"obs":inputs["obs"]}, nets['policy']['obs_encoder'], inputs_as_kwargs=True)
         assert obs_features.ndim == 3  # [B, T, D]
         B = obs_features.shape[0]
 
@@ -440,10 +405,9 @@ class DiffusionPolicyUNet(PolicyAlgo):
         
         # init scheduler
         self.noise_scheduler.set_timesteps(num_inference_timesteps)
-
-        for k in self.noise_scheduler.timesteps:
+        for k in tqdm(self.noise_scheduler.timesteps):
             # predict noise
-            noise_pred = nets['policy']['noise_pred_net'].module(
+            noise_pred = nets['policy']['noise_pred_net'](
                 sample=naction, 
                 timestep=k,
                 global_cond=obs_cond
@@ -777,7 +741,6 @@ class ConditionalUnet1D(nn.Module):
             x = resnet(x, global_feature)
             x = resnet2(x, global_feature)
             x = upsample(x)
-
         x = self.final_conv(x)
 
         # (B,C,T)
