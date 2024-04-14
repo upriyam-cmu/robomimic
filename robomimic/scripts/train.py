@@ -79,7 +79,7 @@ def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, da
     )
     return env
 
-def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False, rank=0, world_size=1, ddp=False):
+def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False, rank=0, world_size=1, ddp=False, dataset_path=None):
     """
     Train a model using the algorithm.
     """
@@ -127,7 +127,7 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
     ObsUtils.initialize_obs_utils_with_config(config)
 
     # make sure the dataset exists
-    dataset_path = os.path.expanduser(config.train.data)
+    dataset_path = os.path.expanduser(dataset_path)
     if not os.path.exists(dataset_path):
         raise Exception("Dataset at provided path {} not found!".format(dataset_path))
 
@@ -595,7 +595,9 @@ def main(rank, args):
         if not os.path.exists(f"/scratch/mdalal/{dataset_name}"):
             # copy the dataset to /scratch/mdalal
             shutil.copyfile(config.train.data, f"/scratch/mdalal/{dataset_name}")
-            config.train.data = f"/scratch/mdalal/{dataset_name}"
+        dataset_path = f"/scratch/mdalal/{dataset_name}"
+    else:
+        dataset_path = config.train.data
 
     # get torch device
     device = TorchUtils.get_torch_device(try_to_use_cuda=config.train.cuda, rank=rank)
@@ -629,7 +631,7 @@ def main(rank, args):
     try:
         train(config, device=device, ckpt_path=ckpt_path, ckpt_dict=ckpt_dict, 
               output_dir=args.output_dir, start_from_checkpoint=args.start_from_checkpoint, 
-              rank=rank, world_size=args.num_gpus, ddp=args.ddp)
+              rank=rank, world_size=args.num_gpus, ddp=args.ddp, dataset_path=dataset_path)
     except Exception as e:
         res_str = "run failed with error:\n{}\n\n{}".format(e, traceback.format_exc())
     print(res_str)
