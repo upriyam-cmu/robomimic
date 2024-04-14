@@ -116,7 +116,7 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
         self.split = split
         if split is not None:
             self.dataset_path = self.dataset_path    
-            f = h5py.File(self.dataset_path, "r")
+            f = h5py.File(self.dataset_path, "r", libver='latest', swmr=True)
             self.hdf5_file = f
             filter_key = split
 
@@ -128,7 +128,10 @@ class EnvMP(EB.EnvBase, gymnasium.Env):
                 demos = list(f["data"].keys())
             inds = np.argsort([int(elem[5:]) for elem in demos])
             if split == 'valid':
-                env_idx = env_idx - num_envs
+                if num_envs == 1:
+                    env_idx = 0 # only one env so don't shift
+                else:
+                    env_idx = env_idx - num_envs
             self.demos = [demos[i] for i in inds if i % num_envs == env_idx]
             print("env idx: {}, split: {}, demos: {}".format(env_idx, split, len(self.demos)))
         else:

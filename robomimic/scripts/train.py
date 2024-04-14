@@ -67,7 +67,7 @@ class DummyVecEnvWrapper(DummyVecEnv):
             out.append(getattr(env, method_name)(*method_args, **method_kwargs))
         return out
 
-def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, dataset_path):
+def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, dataset_path, config_path):
     env_meta['env_kwargs']['dataset_path'] = dataset_path
     env = EnvUtils.create_env_from_metadata(
         env_meta=env_meta,
@@ -77,6 +77,13 @@ def make_env(env_meta, use_images, render_video, pcd_params, mpinets_enabled, da
         pcd_params=pcd_params,
         mpinets_enabled=mpinets_enabled,
     )
+    ext_cfg = json.load(open(config_path, 'r'))
+    config = config_factory(ext_cfg["algo_name"])
+    # update config with external json - this will throw errors if
+    # the external config has keys not present in the base algo config
+    with config.values_unlocked():
+        config.update(ext_cfg)
+    env = EnvUtils.wrap_env_from_config(env, config=config) # apply environment warpper, if applicable
     return env
 
 def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start_from_checkpoint=False, rank=0, world_size=1, ddp=False, dataset_path=None):
@@ -159,11 +166,14 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                 pcd_params = config.experiment.pcd_params.to_dict()
                 mpinets_enabled = config.algo.mpinets.enabled
                 render_video = config.experiment.render_video
+                # save config 
+                config_path = os.path.join(log_dir, 'config.json')
+                json.dump(config, open(config_path, 'w'), indent=4)
                 env_meta['env_kwargs']['cfg']['task']['setup_cameras'] = True # set up cameras for rendering
                 if config.experiment.num_envs > 1:
                     env_fns = []
                     for env_idx in range(config.experiment.num_envs):
-                        env_fn = lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)
+                        env_fn = lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path, config_path)
                         env_fns.append(env_fn)
                     env = SubprocVecEnvWrapper(env_fns, start_method='fork')
                     for env_idx in range(config.experiment.num_envs):
@@ -178,8 +188,11 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
                             num_split_envs = config.experiment.num_envs - 10
                         env.env_method_pass_idx("set_env_specific_params", split, num_split_envs, indices=[env_idx])
                 else:
-                    env = DummyVecEnvWrapper([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path)])
-
+                    env = DummyVecEnvWrapper([lambda: make_env(env_meta, shape_meta['use_images'], render_video, pcd_params, mpinets_enabled, dataset_path, config_path)])
+                    for env_idx in range(config.experiment.num_envs):
+                        split = 'valid'
+                        num_split_envs = 1 
+                        env.env_method_pass_idx("set_env_specific_params", split, num_split_envs, indices=[env_idx])
                 envs[env_name] = env
                 print(envs[env_name])
 
@@ -230,7 +243,11 @@ def train(config, device, ckpt_path=None, ckpt_dict=None, output_dir=None, start
         num_enc_params = sum(p.numel() for p in model.nets['policy'].module.model.nets['encoder'].parameters())
     else:
         num_policy_params =sum(p.numel() for p in model.nets['policy'].parameters())
-        num_enc_params = sum(p.numel() for p in model.nets['policy'].model.nets['encoder'].parameters())
+        try:
+            num_enc_params = sum(p.numel() for p in model.nets['policy'].model.nets['encoder'].parameters())
+        except:
+            # this is for diffusion policy
+            num_enc_params = sum(p.numel() for p in model.nets['policy'].model['obs_encoder'].nets['obs'].parameters())
     print("Policy params: ", format_parameters(num_policy_params))
     print("encoder params: ", format_parameters(num_enc_params))
 
