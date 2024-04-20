@@ -13,12 +13,6 @@ import torch.utils.data
 import robomimic.utils.tensor_utils as TensorUtils
 import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.log_utils as LogUtils
-from tqdm import tqdm
-
-from neural_mp.envs.franka_pybullet_env import compute_full_pcd
-from neural_mp.envs.franka_pybullet_env import depth_to_rgb
-from neural_mp.utils.franka_utils import normalize_franka_joints
-from neural_mp.utils.constants import FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -38,7 +32,6 @@ class SequenceDataset(torch.utils.data.Dataset):
         hdf5_normalize_obs=False,
         filter_by_attribute=None,
         load_next_obs=True,
-        pcd_params=None,
     ):
         """
         Dataset class for fetching sequences of experience.
@@ -93,7 +86,6 @@ class SequenceDataset(torch.utils.data.Dataset):
         self.hdf5_use_swmr = hdf5_use_swmr
         self.hdf5_normalize_obs = hdf5_normalize_obs
         self._hdf5_file = None
-        self.pcd_params = pcd_params
 
         assert hdf5_cache_mode in ["all", "low_dim", None]
         self.hdf5_cache_mode = hdf5_cache_mode
@@ -158,8 +150,8 @@ class SequenceDataset(torch.utils.data.Dataset):
                 self.hdf5_cache = None
         else:
             self.hdf5_cache = None
+
         self.close_and_delete_hdf5_handle()
-        self.ep_to_hdf5_file = None
 
     def load_demo_info(self, filter_by_attribute=None, demos=None):
         """
@@ -192,8 +184,8 @@ class SequenceDataset(torch.utils.data.Dataset):
 
         # determine index mapping
         self.total_num_sequences = 0
-        for ep in tqdm(self.demos):
-            demo_length = int(self.hdf5_file["data/{}".format(ep)].attrs["num_samples"])
+        for ep in self.demos:
+            demo_length = self.hdf5_file["data/{}".format(ep)].attrs["num_samples"]
             self._demo_id_to_start_indices[ep] = self.total_num_sequences
             self._demo_id_to_demo_length[ep] = demo_length
 
@@ -379,30 +371,29 @@ class SequenceDataset(torch.utils.data.Dataset):
         Helper utility to get a dataset for a specific demonstration.
         Takes into account whether the dataset has been loaded into memory.
         """
-        if self.ep_to_hdf5_file is None:
-            self.ep_to_hdf5_file = {ep: self.hdf5_file for ep in self.demos}
+
         # check if this key should be in memory
-        key_should_be_in_memory = self.hdf5_cache_mode in ["all", "low_dim"]
+        key_should_be_in_memory = (self.hdf5_cache_mode in ["all", "low_dim"])
         if key_should_be_in_memory:
             # if key is an observation, it may not be in memory
-            if "/" in key:
-                key1, key2 = key.split("/")
-                assert key1 in ["obs", "next_obs"]
+            if '/' in key:
+                key1, key2 = key.split('/')
+                assert(key1 in ['obs', 'next_obs'])
                 if key2 not in self.obs_keys_in_memory:
                     key_should_be_in_memory = False
 
         if key_should_be_in_memory:
             # read cache
-            if "/" in key:
-                key1, key2 = key.split("/")
-                assert key1 in ["obs", "next_obs"]
+            if '/' in key:
+                key1, key2 = key.split('/')
+                assert(key1 in ['obs', 'next_obs'])
                 ret = self.hdf5_cache[ep][key1][key2]
             else:
                 ret = self.hdf5_cache[ep][key]
         else:
             # read from file
             hd5key = "data/{}/{}".format(ep, key)
-            ret = self.ep_to_hdf5_file[ep][hd5key]
+            ret = self.hdf5_file[hd5key]
         return ret
 
     def __getitem__(self, index):
@@ -546,53 +537,6 @@ class SequenceDataset(torch.utils.data.Dataset):
         obs = {k.split('/')[1]: obs[k] for k in obs}  # strip the prefix
         if self.get_pad_mask:
             obs["pad_mask"] = pad_mask
-            
-        # TODO: make this less hardcoded
-        if 'current_angles' in obs:
-            # compute noise to add to the current angles and the compute_pcd_params (if present)
-            noise = np.random.normal(0, self.pcd_params['noise_scale'], obs['current_angles'].shape)
-            obs['current_angles'] += noise
-            # clamp to joint limits
-            obs['current_angles'] = np.clip(obs['current_angles'], FRANKA_LOWER_LIMITS, FRANKA_UPPER_LIMITS)
-        if 'compute_pcd_params' in obs:
-            obs['compute_pcd_params'][:, :7] = obs['current_angles']
-        if 'goal_angles' in obs and self.pcd_params['relabel_goal_angles']:
-            # sample goal as a future obs (HER style relabeling)
-            demo_length = self._demo_id_to_demo_length[demo_id]
-            start_index = min(demo_length-1, index_in_demo+1)
-            goal_index = np.random.randint(start_index, demo_length)
-            goal_obs, _ = self.get_sequence_from_demo(
-                demo_id,
-                index_in_demo=goal_index,
-                keys=tuple('{}/{}'.format(prefix, k) for k in keys),
-                num_frames_to_stack=1,
-                seq_length=1,
-            )
-            goal_obs = {k.split('/')[1]: goal_obs[k] for k in goal_obs}  # strip the prefix
-            goal_angles = goal_obs['current_angles'][0]
-            # repeat to match obs['current_angles'] shape
-            goal_angles = np.repeat(goal_angles[None, :], obs['current_angles'].shape[0], axis=0)
-            obs['goal_angles'] = goal_angles
-        compute_pcd_params_saved = None
-        for k in obs:
-            if 'pcd' in k:
-                compute_pcd_params_saved = obs[k]
-                obs[k] = compute_full_pcd(
-                    pcd_params=obs[k],
-                    **self.pcd_params
-                )
-                
-            if 'depth' in k:
-                new_obs = []
-                for idx in range(obs[k].shape[0]):
-                    new_obs.append(depth_to_rgb(obs[k][idx]))
-                obs[k] = np.array(new_obs)
-            if 'angles' in k and self.pcd_params['normalize_joint_angles']:
-                obs[k] = normalize_franka_joints(obs[k])
-        
-        #TODO: this breaks when you have multiple datasets with different sized PCD params, fix!
-        # if compute_pcd_params_saved is not None:
-        #     obs['saved_params'] = compute_pcd_params_saved
         return obs
 
     def get_dataset_sequence_from_demo(self, demo_id, index_in_demo, keys, num_frames_to_stack=0, seq_length=1):
@@ -662,50 +606,3 @@ class SequenceDataset(torch.utils.data.Dataset):
         `DataLoader` documentation, for more info.
         """
         return None
-    
-    def update_demo_info(self, demos, online_epoch, data, hdf5_file=None):
-        """
-        This function is called during online epochs to update the demo information based
-        on newly collected demos.
-        Args:
-            demos (list): list of demonstration keys to load data.
-            online_epoch (int): value of the current online epoch
-            data (dict): dictionary containing newly collected demos
-        """
-        if self.ep_to_hdf5_file is None:
-            self.ep_to_hdf5_file = {ep: self.hdf5_file for ep in self.demos}
-        # sort demo keys
-        inds = np.argsort(
-            [int(elem[5:]) for elem in demos]
-        )
-        new_demos = [demos[i] for i in inds]
-        self.demos.extend(new_demos)
-
-        self.n_demos = len(self.demos)
-
-        self.prev_total_num_sequences = self.total_num_sequences
-        for new_ep in new_demos:
-            self.ep_to_hdf5_file[new_ep] = hdf5_file
-            demo_length = data[new_ep]["num_samples"]
-            self._demo_id_to_start_indices[new_ep] = self.total_num_sequences
-            self._demo_id_to_demo_length[new_ep] = demo_length
-
-            num_sequences = demo_length
-            # determine actual number of sequences taking into account whether to pad for frame_stack and seq_length
-            if not self.pad_frame_stack:
-                num_sequences -= self.n_frame_stack - 1
-            if not self.pad_seq_length:
-                num_sequences -= self.seq_length - 1
-
-            if self.pad_seq_length:
-                assert demo_length >= 1  # sequence needs to have at least one sample
-                num_sequences = max(num_sequences, 1)
-            else:
-                assert (
-                    num_sequences >= 1
-                )  # assume demo_length >= (self.n_frame_stack - 1 + self.seq_length)
-
-            for _ in range(num_sequences):
-                self._index_to_demo_id[self.total_num_sequences] = new_ep
-                self.total_num_sequences += 1
-        return new_demos

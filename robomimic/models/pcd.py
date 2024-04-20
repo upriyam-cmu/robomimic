@@ -1,11 +1,10 @@
 from torch import nn
-import pytorch_lightning as pl
 import torch
 import numpy as np
 from typing import Tuple
 from pointnet2_ops.pointnet2_modules import PointnetSAModule
 
-class MPiNetsPointNet(pl.LightningModule):
+class MPiNetsPointNet(nn.Module):
     def __init__(self, size='small'):
         super().__init__()
         self.size = size
