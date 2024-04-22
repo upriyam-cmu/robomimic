@@ -904,9 +904,9 @@ class PointNetEncoder(Module):
     """
     Base class for ConvNets.
     """
-    def __init__(self, encoder_size='small'):
+    def __init__(self, encoder_size='small', n_features=1):
         super(PointNetEncoder, self).__init__()
-        net = MPiNetsPointNet(size=encoder_size)
+        net = MPiNetsPointNet(size=encoder_size, n_features=n_features)
         net = torch.compile(net)
         self.nets = net
 

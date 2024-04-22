@@ -5,9 +5,11 @@ from typing import Tuple
 from pointnet2_ops.pointnet2_modules import PointnetSAModule
 
 class MPiNetsPointNet(nn.Module):
-    def __init__(self, size='small'):
+    def __init__(self, size='small', n_features=1):
         super().__init__()
         self.size = size
+        assert n_features >= 0
+        self.n_features = n_features
         self._build_model()
 
     def _build_model(self):
@@ -21,7 +23,7 @@ class MPiNetsPointNet(nn.Module):
                     npoint=128,
                     radius=0.05,
                     nsample=64,
-                    mlp=[1, 64, 64, 64],
+                    mlp=[self.n_features, 64, 64, 64],
                     bn=False,
                 )
             )
@@ -51,7 +53,7 @@ class MPiNetsPointNet(nn.Module):
                     npoint=128,
                     radius=0.05,
                     nsample=64,
-                    mlp=[1, 64, 64, 64],
+                    mlp=[self.n_features, 64, 64, 64],
                     bn=False,
                 )
             )
@@ -81,7 +83,7 @@ class MPiNetsPointNet(nn.Module):
                     npoint=512,
                     radius=0.05,
                     nsample=128,
-                    mlp=[1, 64, 64, 64],
+                    mlp=[self.n_features, 64, 64, 64],
                     bn=False,
                 )
             )
@@ -105,13 +107,13 @@ class MPiNetsPointNet(nn.Module):
                 nn.LeakyReLU(inplace=True),
                 nn.Linear(1536, 1536),
             )
-        else:
+        elif self.size == 'large':
             self.SA_modules.append(
                 PointnetSAModule(
                     npoint=512,
                     radius=0.05,
                     nsample=128,
-                    mlp=[1, 64, 64, 64],
+                    mlp=[self.n_features, 64, 64, 64],
                     bn=False,
                 )
             )
@@ -161,7 +163,7 @@ class MPiNetsPointNet(nn.Module):
                                               This tensor must be on the GPU (CPU tensors not supported)
         :rtype torch.Tensor: The output from the network
         """
-        assert point_cloud.size(-1) == 4
+        assert point_cloud.size(-1) == 3 + self.n_features
         xyz, features = self._break_up_pc(point_cloud)
         for module in self.SA_modules:
             xyz, features = module(xyz, features)
