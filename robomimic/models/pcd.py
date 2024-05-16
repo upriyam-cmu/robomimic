@@ -2,7 +2,13 @@ from torch import nn
 import torch
 import numpy as np
 from typing import Tuple
-from pointnet2_ops.pointnet2_modules import PointnetSAModule
+
+try:
+    from pointnet2_ops.pointnet2_modules import PointnetSAModule
+except ImportError:
+    def PointnetSAModule(*args, **kwargs):
+        raise NotImplementedError("Could not import pointnet2_ops module")
+
 
 class MPiNetsPointNet(nn.Module):
     def __init__(self, size='small', n_features=1):
