@@ -607,3 +607,111 @@ class SequenceDataset(torch.utils.data.Dataset):
         `DataLoader` documentation, for more info.
         """
         return None
+
+class SequenceInMemoryDataset(SequenceDataset, torch.utils.data.Dataset):
+    class AttrDict:
+        def __init__(self, _dict=None, frozen=False):
+            self.__dict = _dict if _dict is not None else {}
+            self.__frozen = frozen
+
+        def freeze(self):
+            self.__frozen = True
+            return self
+
+        @property
+        def attrs(self):
+            if "attrs" not in self.__dict:
+                if self.__frozen:
+                    raise AttributeError("This AttrDict does not have attribute 'attrs'")
+                self.__dict["attrs"] = SequenceInMemoryDataset.AttrDict()
+            return self.__dict["attrs"]
+
+        def keys(self):
+            return self.__dict.keys()
+
+        def __getitem__(self, __key):
+            if isinstance(__key, str):
+                __key = tuple(__key.split("/"))
+
+            if not isinstance(__key, tuple):
+                __key = (__key,)  # wrap in tuple
+
+            value = self.__dict[__key[0]]
+            return value[__key[1:]] if len(__key) > 1 else value
+
+        def __setitem__(self, __key, __value):
+            assert not self.__frozen
+
+            if isinstance(__key, str):
+                __key = tuple(__key.split("/"))
+
+            if not isinstance(__key, tuple):
+                __key = (__key,)  # wrap in tuple
+
+            if len(__key) > 1:
+                self.__dict[__key[0]][__key[1:]] = __value
+            else:
+                self.__dict[__key[0]] = __value
+
+        def create_group(self, key):
+            assert not self.__frozen
+            assert key not in self.__dict
+            self.__dict[key] = SequenceInMemoryDataset.AttrDict()
+            return self.__dict[key]
+
+        def create_dataset(self, key, *, data):
+            assert not self.__frozen
+            assert key not in self.__dict
+            self.__dict[key] = data
+
+        @staticmethod
+        def wrap(nested_dict):
+            if not isinstance(nested_dict, dict) or isinstance(nested_dict, SequenceInMemoryDataset.AttrDict):
+                return nested_dict
+            return SequenceInMemoryDataset.AttrDict({
+                k: SequenceInMemoryDataset.AttrDict.wrap(v) for k, v in nested_dict.items()
+            }, frozen=True)
+
+
+    def __init__(
+        self,
+        data,
+        obs_keys,
+        dataset_keys,
+        frame_stack=1,
+        seq_length=1,
+        pad_frame_stack=True,
+        pad_seq_length=True,
+        get_pad_mask=False,
+        goal_mode=None,
+        hdf5_normalize_obs=False,
+        filter_by_attribute=None,
+        load_next_obs=True,
+    ):
+        self._hdf5_formatted_data = SequenceInMemoryDataset.AttrDict.wrap(data)
+        SequenceDataset.__init__(
+            self=self,
+            hdf5_path="IN-MEMORY-DATASET",
+            obs_keys=obs_keys,
+            dataset_keys=dataset_keys,
+            frame_stack=frame_stack,
+            seq_length=seq_length,
+            pad_frame_stack=pad_frame_stack,
+            pad_seq_length=pad_seq_length,
+            get_pad_mask=get_pad_mask,
+            goal_mode=goal_mode,
+            hdf5_cache_mode=None,
+            hdf5_use_swmr=True,
+            hdf5_normalize_obs=hdf5_normalize_obs,
+            filter_by_attribute=filter_by_attribute,
+            load_next_obs=load_next_obs,
+        )
+
+    @property
+    def hdf5_file(self):
+        # override file io with in-memory data
+        return self._hdf5_formatted_data
+
+    def close_and_delete_hdf5_handle(self):
+        # nothing to close anymore
+        pass

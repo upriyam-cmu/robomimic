@@ -21,7 +21,7 @@ import robomimic.utils.tensor_utils as TensorUtils
 import robomimic.utils.log_utils as LogUtils
 import robomimic.utils.file_utils as FileUtils
 
-from robomimic.utils.dataset import SequenceDataset
+from robomimic.utils.dataset import SequenceDataset, SequenceInMemoryDataset
 from robomimic.envs.env_base import EnvBase
 from robomimic.envs.wrappers import EnvWrapper
 from robomimic.algo import RolloutPolicy
@@ -125,7 +125,7 @@ def load_data_for_training(config, obs_keys):
     return train_dataset, valid_dataset
 
 
-def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=None):
+def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=None, in_memory_data=None):
     """
     Create a SequenceDataset instance to pass to a torch DataLoader.
 
@@ -141,14 +141,14 @@ def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=Non
         dataset_path (str): if provided, the SequenceDataset instance should load
             data from this dataset path. Defaults to config.train.data.
 
+        in_memory_data (dict or SequenceInMemoryDataset.AttrDict): in-memory dataset to load
+
     Returns:
         dataset (SequenceDataset instance): dataset object
     """
-    if dataset_path is None:
-        dataset_path = config.train.data
+    assert in_memory_data is None or dataset_path is None, "cannot load dataset and in-memory dset simultaneously"
 
-    ds_kwargs = dict(
-        hdf5_path=dataset_path,
+    shared_kwargs = dict(
         obs_keys=obs_keys,
         dataset_keys=config.train.dataset_keys,
         load_next_obs=config.train.hdf5_load_next_obs, # whether to load next observations (s') from dataset
@@ -158,14 +158,19 @@ def dataset_factory(config, obs_keys, filter_by_attribute=None, dataset_path=Non
         pad_seq_length=config.train.pad_seq_length,
         get_pad_mask=False,
         goal_mode=config.train.goal_mode,
-        hdf5_cache_mode=config.train.hdf5_cache_mode,
-        hdf5_use_swmr=config.train.hdf5_use_swmr,
         hdf5_normalize_obs=config.train.hdf5_normalize_obs,
         filter_by_attribute=filter_by_attribute
     )
-    dataset = SequenceDataset(**ds_kwargs)
 
-    return dataset
+    if in_memory_data is not None:
+        return SequenceInMemoryDataset(data=in_memory_data, **shared_kwargs)
+
+    return SequenceDataset(
+        hdf5_path=dataset_path if dataset_path is not None else config.train.data,
+        hdf5_cache_mode=config.train.hdf5_cache_mode,
+        hdf5_use_swmr=config.train.hdf5_use_swmr,
+        **shared_kwargs
+    )
 
 
 def run_rollout(
