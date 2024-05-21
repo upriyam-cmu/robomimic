@@ -111,12 +111,13 @@ def get_env_metadata_from_dataset(dataset_path, set_env_specific_obs_processors=
     return env_meta
 
 
-def get_shape_metadata_from_dataset(dataset_path, all_obs_keys=None, verbose=False):
+def get_shape_metadata_from_dataset(dataset_path=None, in_memory_dataset=None, all_obs_keys=None, verbose=False):
     """
     Retrieves shape metadata from dataset.
 
     Args:
         dataset_path (str): path to dataset
+        in_memory_dataset (SequenceInMemoryDataset.AttrDict): in-memory dataset to analyze
         all_obs_keys (list): list of all modalities used by the model. If not provided, all modalities
             present in the file are used.
         verbose (bool): if True, include print statements
@@ -130,12 +131,19 @@ def get_shape_metadata_from_dataset(dataset_path, all_obs_keys=None, verbose=Fal
             :`'use_images'`: bool, whether or not image modalities are present
             :`'use_depths'`: bool, whether or not depth modalities are present
     """
+    assert sum((dataset_path is None, in_memory_dataset is None)) == 1, "Can only specify one of dataset path and in-memory dataset"
 
     shape_meta = {}
 
     # read demo file for some metadata
-    dataset_path = os.path.expanduser(dataset_path)
-    f = h5py.File(dataset_path, "r")
+    if dataset_path is not None:
+        dataset_path = os.path.expanduser(dataset_path)
+        f = h5py.File(dataset_path, "r")
+    elif in_memory_dataset is not None:
+        f = in_memory_dataset
+    else:
+        assert False, "unreachable"
+
     demo_id = list(f["data"].keys())[0]
     demo = f["data/{}".format(demo_id)]
 

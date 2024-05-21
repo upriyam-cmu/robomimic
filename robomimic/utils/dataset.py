@@ -672,6 +672,9 @@ class SequenceInMemoryDataset(SequenceDataset, torch.utils.data.Dataset):
                 k: SequenceInMemoryDataset.AttrDict.wrap(v) for k, v in nested_dict.items()
             }, frozen=True)
 
+        def close(self):
+            # sometimes, this object can pretend to be a file (namely h5py.File)
+            pass
 
     def __init__(
         self,
