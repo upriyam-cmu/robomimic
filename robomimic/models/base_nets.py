@@ -16,6 +16,7 @@ from torchvision import transforms
 from torchvision import models as vision_models
 
 import robomimic.utils.tensor_utils as TensorUtils
+from robomimic.models.pcd import MPiNetsPointNet
 
 
 CONV_ACTIVATIONS = {
@@ -899,6 +900,50 @@ class Conv1dBase(Module):
                 str(self.output_shape(list(inputs.shape)[1:])), str(list(x.shape)[1:]))
             )
         return x
+
+
+class PointNetEncoder(Module):
+    """
+    Base class for PointNet.
+    """
+    def __init__(self, encoder_size='small', n_features=1):
+        super(PointNetEncoder, self).__init__()
+        net = MPiNetsPointNet(size=encoder_size, n_features=n_features)
+        self.nets = net
+
+    def forward(self, inputs):
+        x = self.nets(inputs)
+        if list(self.output_shape(list(inputs.shape)[1:])) != list(x.shape)[1:]:
+            raise ValueError('Size mismatch: expect size %s, but got size %s' % (
+                str(self.output_shape(list(inputs.shape)[1:])), str(list(x.shape)[1:]))
+            )
+        return x
+
+    def output_shape(self, input_shape):
+        """
+        Function to compute output shape from inputs to this module. 
+
+        Args:
+            input_shape (iterable of int): shape of input. Does not include batch dimension.
+                Some modules may not need this argument, if their output does not depend 
+                on the size of the input, or if they assume fixed size input.
+
+        Returns:
+            out_shape ([int]): list of integers corresponding to output shape
+        """
+        if self.nets.size == 'super_small':
+            return [7]
+        elif self.nets.size == 'small':
+            return [1024]
+        elif self.nets.size == 'medium':
+            return [1536]
+        elif self.nets.size == 'large':
+            return [2048]
+
+    def __repr__(self):
+        """Pretty print network."""
+        header = '{}'.format(str(self.__class__.__name__))
+        return header
 
 
 """

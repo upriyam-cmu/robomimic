@@ -174,6 +174,8 @@ def initialize_obs_utils_with_obs_specs(obs_modality_specs):
             or a list of nested dictionaries. Accepting a list as input makes it convenient for
             situations where multiple modules may each have their own modality spec.
     """
+    print(obs_modality_specs)
+
     global OBS_KEYS_TO_MODALITIES, OBS_MODALITIES_TO_KEYS
 
     OBS_KEYS_TO_MODALITIES = ObservationKeyToModalityDict()
@@ -934,6 +936,39 @@ class DepthModality(Modality):
                 inverse operation of @process_depth
         """
         return unprocess_frame(frame=obs, channel_dim=1, scale=1.)
+
+
+class PCDModality(Modality):
+    """
+    Modality for depth observations
+    """
+    name = "pcd"
+
+    @classmethod
+    def _default_obs_processor(cls, obs):
+        """
+        Given pcd fetched from dataset, process for network input. Basically, do nothing.
+
+        Args:
+            obs (np.array or torch.Tensor): pcd array
+
+        Returns:
+            processed_obs (np.array or torch.Tensor): processed pcd
+        """
+        return obs
+
+    @classmethod
+    def _default_obs_unprocessor(cls, obs):
+        """
+        Given depth prepared for network input, prepare for saving to dataset. Basically, do nothing.
+
+        Args:
+            obs (np.array or torch.Tensor): pcd array
+
+        Returns:
+            unprocessed_obs (np.array or torch.Tensor): unprocessed pcd
+        """
+        return obs
 
 
 class ScanModality(Modality):

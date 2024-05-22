@@ -184,6 +184,67 @@ class VisualCore(EncoderCore, BaseNets.ConvBase):
         return msg
 
 
+class PCDCore(EncoderCore, BaseNets.PointNetEncoder):
+    """
+    A network block that consists of a pcd backbone network.
+    """
+    def __init__(
+        self,
+        input_shape,
+        backbone_class="PointNetEncoder",
+        backbone_kwargs=None,
+    ):
+        """
+        Args:
+            input_shape (tuple): shape of input (not including batch dimension)
+            backbone_class (str): class name for the pcd backbone network. Defaults to "PointNetEncoder".
+            backbone_kwargs (dict): kwargs for the pcd backbone network (optional)
+        """
+        super(PCDCore, self).__init__(input_shape=input_shape)
+
+        if backbone_kwargs is None:
+            backbone_kwargs = dict()
+
+        # visual backbone
+        assert isinstance(backbone_class, str)
+        self.backbone = eval(backbone_class)(**backbone_kwargs)
+
+        net_list = [self.backbone]
+        self.nets = nn.Sequential(*net_list)
+
+    def output_shape(self, input_shape):
+        """
+        Function to compute output shape from inputs to this module. 
+
+        Args:
+            input_shape (iterable of int): shape of input. Does not include batch dimension.
+                Some modules may not need this argument, if their output does not depend 
+                on the size of the input, or if they assume fixed size input.
+
+        Returns:
+            out_shape ([int]): list of integers corresponding to output shape
+        """
+        return self.backbone.output_shape(input_shape)
+
+    def forward(self, inputs):
+        """
+        Forward pass through visual core.
+        """
+        out = super(PCDCore, self).forward(inputs)
+        return out
+
+    def __repr__(self):
+        """Pretty print network."""
+        header = '{}'.format(str(self.__class__.__name__))
+        msg = ''
+        indent = ' ' * 2
+        msg += textwrap.indent(
+            "\ninput_shape={}\noutput_shape={}".format(self.input_shape, self.output_shape(self.input_shape)), indent)
+        msg += textwrap.indent("\nbackbone_net={}".format(self.backbone), indent)
+        msg = header + '(' + msg + '\n)'
+        return msg
+
+
 """
 ================================================
 Scan Core Networks (Conv1D Sequential + Pool)
@@ -827,3 +888,88 @@ class GaussianNoiseRandomizer(Randomizer):
         msg = header + f"(input_shape={self.input_shape}, noise_mean={self.noise_mean}, noise_std={self.noise_std}, " \
                        f"limits={self.limits}, num_samples={self.num_samples})"
         return msg
+
+class PCDRandomizer(Randomizer):
+    """
+    Randomly subsamples the point cloud.
+    """
+
+    def __init__(self, input_shape, pcd_size=4096):
+        """
+        Initializes the PCDRandomizer.
+
+        Args:
+            input_shape (tuple, list): The shape of the input (not including batch dimension).
+            pcd_size (int, optional): The number of points to subsample from the point cloud. Default is 4096.
+        """
+        super(PCDRandomizer, self).__init__()
+        self.input_shape = input_shape
+        self.pcd_size = pcd_size
+
+    def output_shape_in(self, input_shape=None):
+        """
+        Computes the output shape for the subsampled point cloud.
+
+        Args:
+            input_shape (tuple, list, optional): The shape of the input. If None, uses the stored input shape.
+
+        Returns:
+            list: A list representing the shape of the subsampled point cloud.
+        """
+        input_shape = input_shape or self.input_shape
+        effective_pcd_size = min(self.pcd_size, input_shape[1])
+        return [input_shape[0], effective_pcd_size, *input_shape[2:]]
+
+    def output_shape_out(self, input_shape=None):
+        """
+        Returns the output shape for network outputs. Since this randomizer does not modify the outputs,
+        it returns the input shape unchanged.
+
+        Args:
+            input_shape (tuple, list, optional): The shape of the input. 
+
+        Returns:
+            list: The shape of the output.
+        """
+        return list(input_shape)
+
+    def _forward_in(self, inputs):
+        """
+        Subsamples the point cloud to a desired size along the point dimension.
+
+        Args:
+            inputs (torch.Tensor): A tensor representing the input point cloud of shape (batch_size, num_points, ...).
+
+        Returns:
+            torch.Tensor: A tensor representing the subsampled point cloud.
+        """
+        batch_size = inputs.shape[0]
+        num_points = inputs.shape[1]
+
+        effective_pcd_size = min(self.pcd_size, num_points)
+        random_indices = torch.randint(0, num_points, (batch_size, effective_pcd_size), device=inputs.device)
+        batch_indices = torch.arange(batch_size, device=inputs.device).unsqueeze(1).expand(-1, effective_pcd_size)
+
+        return inputs[batch_indices, random_indices, :]
+
+    def _forward_out(self, inputs):
+        """
+        Returns the inputs unchanged. This method exists to fulfill the interface requirements of the base class
+        but doesn't apply any transformation to the inputs.
+
+        Args:
+            inputs (torch.Tensor): A tensor representing network outputs.
+
+        Returns:
+            torch.Tensor: The input tensor unchanged.
+        """
+        return inputs 
+
+    def __repr__(self):
+        """
+        Returns a string representation of the PCDRandomizer.
+
+        Returns:
+            str: A string representation of the PCDRandomizer.
+        """
+        return f"{self.__class__.__name__}(input_shape={self.input_shape}, pcd_size={self.pcd_size})"
