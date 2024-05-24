@@ -9,6 +9,7 @@ except ImportError:
     def PointnetSAModule(*args, **kwargs):
         raise NotImplementedError("Could not import pointnet2_ops module")
 
+from skills_planning.nn.transic.pointnet import PointNet
 
 class MPiNetsPointNet(nn.Module):
     def __init__(self, size='small', n_features=1):
@@ -143,6 +144,21 @@ class MPiNetsPointNet(nn.Module):
                 nn.LeakyReLU(inplace=True),
                 nn.Linear(2048, 2048),
             )
+        elif self.size == 'transic':
+            self.SA_modules.append(
+                PointNet(
+                    n_coordinates=3,
+                    add_ee_embd=True,
+                    ee_embd_dim=128,
+                    output_dim=256,
+                    hidden_dim=256,
+                    hidden_depth=2,
+                    activation="gelu",
+                    subtract_mean=False,
+                )
+            )
+
+            self.fc_layer = nn.Sequential()
 
     @staticmethod
     def _break_up_pc(pc: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
