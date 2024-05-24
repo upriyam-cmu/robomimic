@@ -939,6 +939,8 @@ class PointNetEncoder(Module):
             return [1536]
         elif self.nets.size == 'large':
             return [2048]
+        elif self.nets.size == 'transic':
+            return [256]
 
     def __repr__(self):
         """Pretty print network."""
